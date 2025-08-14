@@ -303,7 +303,8 @@ class SecBERTClassifier:
         print("Preparing train/validation/test splits...")
 
         # Encode labels
-        y_encoded = self.label_encoder.fit_transform(df[column])
+        # y_encoded = self.label_encoder.fit_transform(df[column])
+        y_encoded = self.label_encoder.transform(df[column])
         print(f"Label classes: {self.label_encoder.classes_}")
 
         # Split data - stratified to maintain class distribution
@@ -556,85 +557,41 @@ def main():
     label_encoder = LabelEncoder()
     label_encoder.classes_ = np.array(impact_labels)
 
-    # Split data - stratified to maintain class distribution
-    y_encoded = label_encoder.transform(df["impact_clean"])
-    df, df_test, _, _ = train_test_split(
-        df,
-        y_encoded,
-        test_size=0.2,
-        random_state=42,
-        stratify=y_encoded,
+    num_labels = df["impact_clean"].nunique()
+    classifier = SecBERTClassifier(num_labels)
+    classifier.label_encoder = label_encoder
+
+    print(f"\n\nTraining {'impact_clean'}, num_labels = {num_labels}, rows = {len(df)}")
+    print(f"Impact distribution: {df['impact_clean'].value_counts()}")
+
+    classifier.prepare_model_and_tokenizer()
+    train_dataset, val_dataset, test_dataset = classifier.prepare_datasets(
+        df, "impact_clean"
     )
 
-    classifier_by_metric = {}
-
-    for cvss3_metric in CVSS3_BASIC_METRICS:
-        # Initialize classifier
-        num_labels = df[cvss3_metric].nunique()
-        classifier = SecBERTClassifier(num_labels)
-
-        print(
-            f"\n\nTraining {cvss3_metric}, num_labels = {num_labels}, rows = {len(df)}"
-        )
-        print(f"Impact distribution: {df[cvss3_metric].value_counts()}")
-
-        classifier.prepare_model_and_tokenizer()
-        train_dataset, val_dataset, test_dataset = classifier.prepare_datasets(
-            df, cvss3_metric
-        )
-
-        classifier.train_model(
-            train_dataset,
-            val_dataset,
-            output_dir=f"./etc/models/secbert_model/{cvss3_metric}",
-        )
-
-        print("Evaluating model on test set...")
-        y_pred, y_true, target_names = classifier.get_predictions(test_dataset)
-        evaluate_model(
-            y_pred,
-            y_true,
-            target_names,
-            show_plots=False,
-            file_prefix=f"./etc/{cvss3_metric}-",
-        )
-        classifier_by_metric[cvss3_metric] = classifier
-
-    # create a new column with the predicted impact based on the predicted CVSS3 base metrics
-    df_test["pred_impact"] = df_test.apply(
-        compute_pred_impact, axis=1, classifier_by_metric=classifier_by_metric
+    classifier.train_model(
+        train_dataset,
+        val_dataset,
+        output_dir="./etc/models/secbert_model/impact_clean",
     )
 
-    # Prepare expected/actual output
-    y_pred = label_encoder.transform(df_test["pred_impact"])
-    y_true = label_encoder.transform(df_test["impact_clean"])
+    print("Evaluating model on test set...")
+    y_pred, y_true, target_names = classifier.get_predictions(test_dataset)
 
     # Overall evaluation
-    accuracy, report, cm = evaluate_model(y_pred, y_true, impact_labels)
+    accuracy, report, cm = evaluate_model(y_pred, y_true, target_names)
 
     # Test sample predictions
     print("SAMPLE PREDICTIONS:")
     print("=" * 60)
 
     # Pick 4 random inputs from df_test
-    sample_texts = df_test["text_input"].sample(n=4)
+    sample_texts = df["text_input"].sample(n=4)
 
     for i, text in enumerate(sample_texts, 1):
         print(f"\n{i}. Text: {text}")
-        cvss3_str = "CVSS:3.1"
-        for cvss3_metric in CVSS3_BASIC_METRICS:
-            classifier = classifier_by_metric[cvss3_metric]
-            value, confidence = classifier.predict_severity(normalize_text(text))
-            print(
-                f"   Predicted {cvss3_metric}: {value} (confidence: {confidence:.3f})"
-            )
-            cvss3_str += f"/{cvss3_metric}:{value[0]}"
-
-        print(f"   Predicted CVSS3 vector: {cvss3_str}")
-        cvss3 = cvss.CVSS3(cvss3_str)
-        cvss3_score = cvss3.scores()[0]
-        print(f"   Predicted CVSS3 score: {cvss3_score}")
-        print(f"   Predicted impact: {impact_by_cvss3_score(cvss3_score)}")
+        value, confidence = classifier.predict_severity(normalize_text(text))
+        print(f"   Predicted impact: {value} (confidence: {confidence:.3f})")
 
     # Final results
     print(f"\n{'=' * 60}")
