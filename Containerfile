@@ -19,9 +19,12 @@ RUN git config --global --add safe.directory /src/aegis-ai \
     && chmod 0755 entrypoint.sh
 
 # checkout the repository and initialize virtual environment
+COPY --chown=aegis .git /tmp/aegis-ai
 RUN umask 2 \
-    && git clone --depth=1 https://github.com/RedHatProductSecurity/aegis-ai.git \
+    && git clone --branch=main --depth=1 file:///tmp/aegis-ai \
+    && rm -fr /tmp/aegis-ai \
     && cd aegis-ai \
+    && git remote set-url origin https://github.com/RedHatProductSecurity/aegis-ai.git \
     && uv sync 
 
 # the default entry point can be overridden at run time
