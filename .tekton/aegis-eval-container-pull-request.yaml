@@ -582,6 +582,104 @@ spec:
         operator: in
         values:
         - "false"
+    - name: smoke-test
+      params:
+      - name: image-url
+        value: $(tasks.build-image-index.results.IMAGE_URL)
+      - name: image-digest
+        value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+      - name: remote-cluster-url
+        value: api.kflux-prd-rh02.0fk9.p1.openshiftapps.com:6443
+      - name: remote-cluster-token-secret-name
+        value: konflux-remote-token
+      - name: remote-cluster-token-key
+        value: token
+      runAfter:
+      - build-image-index
+      when:
+      - input: $(params.skip-checks)
+        operator: in
+        values:
+        - "false"
+      taskSpec:
+        description: Try to deploy the newly built container image in a pod.
+        params:
+        - name: image-url
+          type: string
+        - name: image-digest
+          type: string
+        - name: remote-cluster-url
+          type: string
+        - name: remote-cluster-token-secret-name
+          type: string
+          default: konflux-remote-token
+        - name: remote-cluster-token-key
+          type: string
+          default: token
+        steps:
+          - name: deploy
+            image: registry.redhat.io/openshift4/ose-cli:4.13@sha256:73df37794ffff7de1101016c23dc623e4990810390ebdabcbbfa065214352c7c
+            volumeMounts:
+              - name: konflux-remote-token
+                mountPath: /var/run/konflux-remote-token
+                readOnly: true
+            script: |
+              #!/bin/bash -e
+              TOKEN="$(cat /var/run/konflux-remote-token/$(params.remote-cluster-token-key))"
+              oc login --token="${TOKEN}" --server=$(params.remote-cluster-url)
+              set -x
+              oc project kdudka-tenant
+              oc delete pod kdudka-aegis-test || :
+              tee aegis-eval.yaml << EOF
+              ---
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: kdudka-aegis-test
+              spec:
+                containers:
+                - name: kdudka-aegis-test
+                  image: $(params.image-url)
+                  imagePullPolicy: Always
+                  command: ["/bin/bash", "-c", "cd aegis-ai && make eval"]
+                  workdir: /repo
+                  env:
+                    # make the tables in pydantic-eval reports readable
+                    - name: COLUMNS
+                      value: "200"
+
+                    # enable colorized text when output is redirected
+                    - name: PYTEST_ADDOPTS
+                      value: "--color=yes"
+
+                    - name: AEGIS_LLM_HOST
+                      value: "https://generativelanguage.googleapis.com"
+
+                    - name: AEGIS_LLM_MODEL
+                      value: "gemini-2.5-flash"
+
+                    - name: GEMINI_API_KEY
+                      valueFrom:
+                        secretKeyRef:
+                          name: gemini-key
+                          key: token
+
+                  resources:
+                    requests:
+                      memory: "2Gi"
+                      cpu: 1
+                    limits:
+                      memory: "4Gi"
+                      cpu: 2
+              EOF
+              oc create -f aegis-eval.yaml
+              oc wait --for=condition=Ready --timeout=300s pod/kdudka-aegis-test
+              oc logs -f kdudka-aegis-test
+        volumes:
+        - name: konflux-remote-token
+          secret:
+            secretName: $(params.remote-cluster-token-secret-name)
+
     workspaces:
     - name: git-auth
       optional: true
