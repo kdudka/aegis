@@ -625,3 +625,10 @@ spec:
   - name: dockerfile
     value: Containerfile.eval
   pipelineSpec: *shared-pipeline
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-aegis-eval-container
+  workspaces:
+  - name: git-auth
+    secret:
+      secretName: '{{ git_auth_secret }}'
+status: {}
