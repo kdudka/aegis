@@ -592,13 +592,6 @@ spec:
     secret:
       secretName: '{{ git_auth_secret }}'
 status: {}
-  taskRunTemplate:
-    serviceAccountName: build-pipeline-aegis-eval-container
-  workspaces:
-  - name: git-auth
-    secret:
-      secretName: '{{ git_auth_secret }}'
-status: {}
 ---
 apiVersion: tekton.dev/v1
 kind: PipelineRun
