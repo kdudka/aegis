@@ -178,7 +178,7 @@ spec:
       params: [{name: SOURCE_ARTIFACT}]
       results: [{name: IMAGE_LABELS, type: array, description: Image labels implied by git tags.}]
       volumes: [{name: workdir, emptyDir: {}}]
-      stepTemplate: {volumeMounts: {name: workdir, mountPath: /var/workdir}}
+      stepTemplate: {volumeMounts: [{name: workdir, mountPath: /var/workdir}]}
       steps:
       - name: use-trusted-artifact
         image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:4689f88dd253bd1feebf57f1a76a5a751880f739000719cd662bbdc76990a7fd
