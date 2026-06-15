@@ -112,6 +112,7 @@ class SuggestImpactModel(AegisFeatureModel):
         ),
     )
 
+    _flags: List[str] = PrivateAttr(default_factory=list)
     _classifier_diagnostics: Optional[Dict[str, Any]] = PrivateAttr(default=None)
     _reconciliation_trace: Optional[str] = PrivateAttr(default=None)
     _escalation_floor_applied: bool = PrivateAttr(default=False)
