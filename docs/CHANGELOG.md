@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-06-26
+
+### Changed
+- `osidb-bot` now records `data_quality` and `confidence` in `aegis_meta`, including when suggestions are discarded
+- migrated MCP servers from deprecated `MCPServerStdio` to `MCPToolset` + `StdioTransport` (pydantic-ai v2)
+- treat empty env vars as unset in `get_env_*()` settings helpers
+
+### Added
+- added `quality-review` feature with weighted FQI (Flaw Quality Index) rubric and Customer Lens
+- added `external_references_tool` for fetching CVE reference URLs
+- added `--read-only` option to `osidb-bot` to skip OSIDB data updates
+- added `--force` option to `osidb-bot` to skip flaw eligibility validation
+- added Maven ecosystem eval cases for `suggest-affected-components` using `groupId/artifactId` format
+
+### Fixed
+- handle Mozilla CVEs with sparse `comment_zero`
+- bound memory for kernel patch and HTML fetches in the classifier
+- resolve specific artifacts instead of umbrella project names in `suggest-affected-components`
+- improved tool call logging readability
+
+
 ## [0.7.4] - 2026-06-05
 
 ### Fixed
