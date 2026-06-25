@@ -88,6 +88,7 @@ github_mcp_toolset = MCPToolset(
         "podman",
         args=[
             "run",
+            "--rm",
             "-i",
             "-e",
             "GITHUB_PERSONAL_ACCESS_TOKEN",
