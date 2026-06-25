@@ -6,11 +6,10 @@ Aegis MCP - register mcp here
 import os
 import logging
 import time
-import warnings
 
 from typing import Any
 
-from pydantic_ai.mcp import MCPServerStdio  # ty: ignore[deprecated]
+from pydantic_ai.mcp import MCPToolset, StdioTransport
 from pydantic_ai.toolsets import (
     AbstractToolset,
     CombinedToolset,
@@ -60,22 +59,20 @@ class LoggingToolset(WrapperToolset[AgentDepsT]):
 
 
 # register any MCP tools below:
-# MCPServerStdio is deprecated in pydantic-ai v2 in favor of MCPToolset, but
-# MCPToolset requires fastmcp[client] which is not yet available in our env.
-warnings.filterwarnings("ignore", r"`MCPServer\w+` is deprecated", DeprecationWarning)
 
 # mcp-nvd: query NIST National Vulnerability Database (NVD)
 # https://github.com/marcoeg/mcp-nvd
 #
 # requires NVD_API_KEY=
-nvd_stdio_server = MCPServerStdio(  # ty: ignore[deprecated]
-    "uv",
-    args=[
-        "run",
-        "mcp-nvd",
-    ],
-    tool_prefix="mitre_nvd",
-)
+nvd_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "mcp-nvd",
+        ],
+    ),
+).prefixed("mitre_nvd")
 
 # github-mcp: read only query against github.
 # https://hub.docker.com/r/mcp/github-mcp-server
@@ -86,54 +83,57 @@ nvd_stdio_server = MCPServerStdio(  # ty: ignore[deprecated]
 #
 # Use FQIN (ghcr.io/github/github-mcp-server) to avoid Podman short-name
 # resolution prompt when running without a TTY (e.g. web server, CI).
-github_stdio_server = MCPServerStdio(  # ty: ignore[deprecated]
-    "podman",
-    args=[
-        "run",
-        "-i",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
-        "GITHUB_TOOLSETS",
-        "-e",
-        "GITHUB_READ_ONLY",
-        "ghcr.io/github/github-mcp-server",
-    ],
-    env={
-        "GITHUB_PERSONAL_ACCESS_TOKEN": f"{os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')}",
-        "GITHUB_TOOLSETS": "repos,pull_requests",  # TODO: expand list of services at some point
-        "GITHUB_READ_ONLY": "1",
-    },
-    tool_prefix="github",
-)
+github_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "podman",
+        args=[
+            "run",
+            "-i",
+            "-e",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "-e",
+            "GITHUB_TOOLSETS",
+            "-e",
+            "GITHUB_READ_ONLY",
+            "ghcr.io/github/github-mcp-server",
+        ],
+        env={
+            "GITHUB_PERSONAL_ACCESS_TOKEN": f"{os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')}",
+            "GITHUB_TOOLSETS": "repos,pull_requests",  # TODO: expand list of services at some point
+            "GITHUB_READ_ONLY": "1",
+        },
+    ),
+).prefixed("github")
 
 # wikipedia-mcp: query wikipedia
 # https://github.com/rudra-ravi/wikipedia-mcp
 #
 # requires wikipedia PAT
-wikipedia_stdio_server = MCPServerStdio(  # ty: ignore[deprecated]
-    "uv",
-    args=[
-        "run",
-        "wikipedia-mcp",
-    ],
-    tool_prefix="wikipedia",
-)
+wikipedia_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "wikipedia-mcp",
+        ],
+    ),
+).prefixed("wikipedia")
 
 # mcp-pypi: query pypi
 # https://github.com/kimasplund/mcp-pypi
 #
-pypi_stdio_server = MCPServerStdio(  # ty: ignore[deprecated]
-    "uv",
-    args=[
-        "run",
-        "mcp-pypi",
-        "stdio",
-        "--cache-dir",
-        f"{get_settings().config_dir}/pypi-mcp",
-    ],
-    tool_prefix="pypi-mcp",
-)
+pypi_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "mcp-pypi",
+            "stdio",
+            "--cache-dir",
+            f"{get_settings().config_dir}/pypi-mcp",
+        ],
+    ),
+).prefixed("pypi-mcp")
 
 # Enable public function tools
 public_toolset_list = []
@@ -155,7 +155,7 @@ if get_settings().use_tavily_tool:
     public_toolset_list.append(FunctionToolset(tools=[tavily_tool]))
 
 if get_settings().use_github_mcp_tool:
-    public_toolset_list.append(github_stdio_server)
+    public_toolset_list.append(github_mcp_toolset)
 
 if get_settings().use_wikipedia_tool:
     from aegis_ai.toolsets.tools.wikipedia import wikipedia_tool
@@ -163,10 +163,10 @@ if get_settings().use_wikipedia_tool:
     public_toolset_list.append(FunctionToolset(tools=[wikipedia_tool]))
 
 if get_settings().use_wikipedia_mcp_tool:
-    public_toolset_list.append(wikipedia_stdio_server)
+    public_toolset_list.append(wikipedia_mcp_toolset)
 
 if get_settings().use_pypi_mcp_tool:
-    public_toolset_list.append(pypi_stdio_server)
+    public_toolset_list.append(pypi_mcp_toolset)
 
 if get_settings().use_external_references_tool:
     from aegis_ai.toolsets.tools.external_references import external_references_toolset
@@ -205,7 +205,7 @@ public_cve_toolset_list: list[AbstractToolset[Any]] = [
 ]
 
 if get_settings().use_nvd_dev_tool:
-    public_cve_toolset_list.append(nvd_stdio_server)
+    public_cve_toolset_list.append(nvd_mcp_toolset)
 
 public_cve_toolset = CombinedToolset(public_cve_toolset_list)
 
