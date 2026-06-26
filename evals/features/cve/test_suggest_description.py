@@ -243,6 +243,16 @@ cases = [
         expected_description="A flaw was found in /driver/xyz.c in xyg sub component in the Linux kernel. This vulnerability allows a buffer overflow due to xyz leading to abc.",
     ),
     SuggestDescriptionCase(
+        cve_id="CVE-2026-0864",
+        expected_title="Python configparser: Configuration file injection via carriage return characters in multi-line values",
+        expected_description="A flaw was found in the `configparser` module of Python. When writing configuration files that contain multi-line text values with carriage return characters, an attacker who controls the input value can inject unexpected keys and values into the resulting file. This vulnerability, stemming from improper handling of line endings, could lead to unauthorized modification of configuration settings.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-9697",
+        expected_title="undici: TLS certificate validation bypass via SOCKS5 ProxyAgent",
+        expected_description="A flaw was found in undici, a Node.js HTTP/1.1 client. When undici's ProxyAgent is configured with a SOCKS5 proxy, it silently ignores the requestTls option, leading to a Transport Layer Security (TLS) certificate validation bypass. This allows a remote attacker to perform a Man-in-the-Middle (MITM) attack, enabling them to read and tamper with HTTPS communications by presenting an untrusted certificate. Applications relying on specific TLS certificate pinning are particularly vulnerable.",
+    ),
+    SuggestDescriptionCase(
         cve_id="CVE-2026-31898",
         expected_title="jsPDF: Arbitrary code execution via unsanitized input in createAnnotation method",
     ),
@@ -267,6 +277,36 @@ cases = [
         cve_id="CVE-2026-33002",
         expected_title="Jenkins: Origin validation bypass via DNS rebinding in CLI WebSocket endpoint",
         metadata={"known_to_fail_evaluators": ["TitleEvaluator"]},
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-44727",
+        expected_title="Jupyter Server: Remote Code Execution due to improper Content-Security-Policy",
+        expected_description="A flaw was found in Jupyter Server, the backend for Jupyter web applications. This vulnerability allows a remote attacker to achieve stored Cross-Site Scripting (XSS) by crafting a malicious notebook. When an authenticated user views this notebook, the system's nbconvert HTTP handlers render user-authored HTML without a proper Content-Security-Policy (CSP) sandbox directive. This oversight enables the execution of arbitrary code, potentially leading to full administrative control and remote code execution (RCE) on the server.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-50019",
+        expected_title="yt-dlp: Information disclosure via cookie leak with curl downloader",
+        expected_description="A flaw was found in yt-dlp, a command-line audio/video downloader. When curl is used as an external downloader, a remote attacker could exploit a vulnerability to leak sensitive user cookies. This occurs when yt-dlp passes cookies to curl without properly activating curl's cookie engine, causing cookies to be sent to unintended hosts during HTTP redirects or when downloading fragments from different domains. This could lead to unauthorized access to user accounts or sensitive information.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-50193",
+        expected_title="jackson-databind: Denial of Service via deeply nested JSON processing",
+        expected_description="A flaw was found in jackson-databind, a library used for processing JSON data. A remote attacker could exploit this vulnerability by sending specially crafted, deeply nested JSON to a service. If the service processes this input and then attempts to convert it back to a string, it can consume significant system resources. This uncontrolled resource consumption can lead to a Denial of Service (DoS), making the service unavailable to legitimate users.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-52799",
+        expected_title="Gogs: Information disclosure via missing authorization on attachment download",
+        expected_description="A flaw was found in Gogs, an open-source self-hosted Git service. This missing authorization vulnerability allows an unauthenticated remote attacker to download attachment files from private repositories if the attachment's unique identifier (UUID) is known. This bypass occurs because the system fails to verify user permissions when retrieving attachment files. The primary consequence is the disclosure of confidential information, such as credentials, cryptographic keys, or internal documents, which could lead to significant security risks.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-54531",
+        expected_title="pypdf: Denial of Service via crafted PDF with outlines",
+        expected_description="A flaw was found in pypdf, a pure-python PDF library. A remote attacker could craft a malicious PDF file containing outlines. When this crafted PDF is merged into a writer, it can lead to an infinite loop, causing a Denial of Service (DoS) in the application processing the PDF.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-54905",
+        expected_title="concurrent-ruby: Write lock granted without exclusivity due to read-count overflow",
+        expected_description="A flaw was found in concurrent-ruby. The Concurrent::ReentrantReadWriteLock component can incorrectly grant a write lock to a thread. This occurs when a thread repeatedly acquires a read lock, leading to an integer overflow in its internal counter. As a result, other threads can still hold or acquire read locks simultaneously, breaking the mutual-exclusion guarantee and potentially causing race conditions and inconsistent data reads.",
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2099-99999",
