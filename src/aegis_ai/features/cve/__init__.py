@@ -615,7 +615,7 @@ class SuggestDescriptionText(Feature):
                 'description': one short paragraph.
                 - Begin with: "A flaw was found in <component>."
                 - Clearly state: who can exploit the flaw (e.g., a remote attacker, a local user, a malicious server), how it can be exploited (method/conditions), and the concrete consequences.
-                - Include the vulnerability type when clear (use CWE category when obvious), the affected component, the trigger/cause, and the primary impact.
+                - Include the vulnerability type when clear, the affected component, the trigger/cause, and the primary impact.
                 - Highlight the most important consequence first. Prefer domain phrases such as "arbitrary code execution", "privilege escalation", "information disclosure", or "Denial of Service (DoS)".
                 - Use plain English; avoid deep implementation jargon. If a function or symbol name is central to exploitation, you may mention a single example and explain it briefly.
                 - If a term or acronym is needed, briefly define it and expand the acronym in parentheses on first use.
@@ -627,7 +627,8 @@ class SuggestDescriptionText(Feature):
                   - Do NOT invent a specific component, function, trigger, CWE, or impact if the source data and references do not clearly support it.
                   - If a single component or trigger cannot be reliably identified, use neutral wording (e.g., "in the affected component") and describe the mechanism at a high level.
                   - Prefer calibrated phrasing when evidence is weak (e.g., "may allow", "can enable") rather than asserting specifics.
-                  - Only include a CWE category or precise impact (e.g., "arbitrary code execution", "privilege escalation") when it is well-supported; otherwise, use a generic but accurate type (e.g., "input validation vulnerability", "memory corruption vulnerability") or simply "vulnerability".
+                  - Never mention CWE identifiers or CWE category names (e.g., "CWE-79", "CWE-835", "Loop with Unreachable Exit Condition") in the description — CWE classification is handled separately.
+                  - Only include a precise impact (e.g., "arbitrary code execution", "privilege escalation") when it is well-supported; otherwise, use a generic but accurate type (e.g., "input validation vulnerability", "memory corruption vulnerability") or simply "vulnerability".
                 'title': <= 20 words, summarize the description; include product/component and vulnerability type or consequence.
                 - Style: "<Component>: <primary consequence> via <trigger/cause>" when applicable.
                 - Prefer one primary consequence in the title (the worst plausible or the one the advisory emphasizes). Avoid stacking multiple unrelated impact types (e.g. several "and" clauses for different CIA outcomes); use one umbrella phrase in the title and put nuance in the description.
