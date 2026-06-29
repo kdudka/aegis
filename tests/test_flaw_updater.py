@@ -385,8 +385,8 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
 
     updater = FlawUpdater(session, agent, CVE_ID)
 
-    with pytest.raises(RuntimeError, match="left unchanged"):
-        await updater.apply_suggestions()
+    result = await updater.apply_suggestions()
+    assert result is False
 
     assert updater.updated_fields == set()
 

@@ -234,9 +234,10 @@ class FlawUpdater:
                 all_ok = False
                 self._warn(str(e))
 
-        if not self.updated_fields:
-            # nothing has changed
-            raise RuntimeError("left unchanged")
+        if not self.updated_fields and not self.force:
+            # nothing has changed (unexpectedly)
+            self._warn("left unchanged")
+            return False
 
         return all_ok
 
