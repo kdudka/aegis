@@ -211,8 +211,9 @@ class FlawUpdater:
             created_dt=datetime.fromisoformat(self.flaw_data["created_dt"]),
         )
 
-    async def apply_suggestions(self) -> None:
+    async def apply_suggestions(self) -> bool:
         assert self.flaw_data
+        all_ok: bool = True
 
         # query current server time once (before requesting suggestions)
         timestamp: Optional[datetime] = None
@@ -227,11 +228,17 @@ class FlawUpdater:
 
         # requests suggestions sequentially one by one
         for fnc in DEFAULT_SUGGESTION_LIST:
-            self.updated_fields |= await fnc(self.agent, self.flaw_data, timestamp)
+            try:
+                self.updated_fields |= await fnc(self.agent, self.flaw_data, timestamp)
+            except RuntimeError as e:
+                all_ok = False
+                self._warn(str(e))
 
         if not self.updated_fields:
             # nothing has changed
             raise RuntimeError("left unchanged")
+
+        return all_ok
 
     def create_alias_label(self, label_name: str) -> bool:
         """create a flaw label of type "alias" with name label_name, return True on success"""
