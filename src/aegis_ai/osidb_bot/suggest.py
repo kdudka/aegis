@@ -55,8 +55,11 @@ async def exec_feature(feature: Feature, flaw_data: FlawData) -> Any:
         if isinstance(output, AegisFeatureModel):
             return output
 
+        # fallback for output being None or something unexpected
+        raise RuntimeError(f"exec_feature({feat_name}) got invalid output")
+
     except Exception as e:
-        msg = "exec_feature() terminated with Exception"
+        msg = f"exec_feature({feat_name}) terminated with Exception"
         logger.debug(f"{msg}: {str(e)}")
         raise RuntimeError(f"{msg}: {e.__class__.__name__}")
 
@@ -152,8 +155,6 @@ async def suggest_components(
     # request the suggestion from Aegis
     feature = cve.SuggestAffectedComponents(agent)
     output = await exec_feature(feature, flaw_data)
-    if output is None:
-        return set()
 
     changed = update_field(flaw_data, ts, "components", output)
 
@@ -170,8 +171,6 @@ async def suggest_description(
     # request the suggestion from Aegis
     feature = cve.SuggestDescriptionText(agent)
     output = await exec_feature(feature, flaw_data)
-    if output is None:
-        return set()
 
     # pick the relevant fields
     changed = update_field(flaw_data, ts, "title", output, src="suggested_title")
@@ -193,8 +192,6 @@ async def suggest_cwe(agent: Agent, flaw_data: FlawData, ts: datetime) -> set[st
     # request the suggestion from Aegis
     feature = cve.SuggestCWE(agent)
     output = await exec_feature(feature, flaw_data)
-    if output is None:
-        return set()
 
     suggested_cwes = output.cwe
     if not suggested_cwes:
@@ -220,8 +217,6 @@ async def suggest_impact(agent: Agent, flaw_data: FlawData, ts: datetime) -> set
     # request the suggestion from Aegis
     feature = cve.SuggestImpact(agent)
     output = await exec_feature(feature, flaw_data)
-    if output is None:
-        return set()
 
     if not output.impact or not output.cvss3_vector:
         cve_id = flaw_data.get("cve_id")
