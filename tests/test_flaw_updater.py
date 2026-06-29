@@ -58,6 +58,8 @@ def _mock_session(flaw_data: dict) -> MagicMock:
     session.flaws.update = MagicMock()
     session.flaws.cvss_scores = MagicMock()
     session.flaws.cvss_scores.create = MagicMock()
+    session.flaws.labels = MagicMock()
+    session.flaws.labels.create = MagicMock()
     return session
 
 
@@ -196,6 +198,8 @@ async def test_flaw_updater_do_sets_processed_in_aegis_meta(mock_exec_feature):
 
     aegis_meta = flaw_data["aegis_meta"]
     assert aegis_meta.get("processed") is True
+
+    session.flaws.labels.create.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -402,3 +406,82 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
             assert entry["data_quality"] == LOW_QUALITY
             assert entry["confidence"] == LOW_CONFIDENCE
             datetime.fromisoformat(entry["timestamp"])
+
+
+MANUAL_TRIAGE_LABEL = {
+    "label": "manual-triage",
+    "type": "alias",
+    "state": "NEW",
+}
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_flaw_updater_do_creates_manual_triage_label_on_all_skipped(
+    mock_exec_feature,
+):
+    """FlawUpdater.do() creates manual-triage label when all suggestions are discarded."""
+
+    async def _low_metrics_exec(feature, flaw_data):
+        name = feature.__class__.__name__
+        explanation = f"Low-quality output for {name}"
+        metrics = dict(data_quality=LOW_QUALITY, confidence=LOW_CONFIDENCE)
+
+        if name == "SuggestAffectedComponents":
+            return SimpleNamespace(
+                components=["kernel"], ecosystems=[], explanation=explanation, **metrics
+            )
+        if name == "SuggestDescriptionText":
+            return SimpleNamespace(
+                suggested_title="t",
+                suggested_description="d",
+                explanation=explanation,
+                **metrics,
+            )
+        if name == "SuggestCWE":
+            return SimpleNamespace(cwe=["CWE-79"], explanation=explanation, **metrics)
+        if name == "SuggestImpact":
+            return SimpleNamespace(
+                impact="LOW",
+                cvss3_score="3.7",
+                cvss3_vector="CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+                explanation=explanation,
+                **metrics,
+            )
+        raise ValueError(f"Unknown feature: {name}")
+
+    mock_exec_feature.side_effect = _low_metrics_exec
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    agent = MagicMock()
+
+    updater = FlawUpdater(session, agent, CVE_ID)
+    await updater.do()
+
+    session.flaws.labels.create.assert_called_once_with(
+        flaw_id=flaw_data["uuid"],
+        form_data=MANUAL_TRIAGE_LABEL,
+    )
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_flaw_updater_do_creates_manual_triage_label_on_save_failure(
+    mock_exec_feature,
+):
+    """FlawUpdater.do() creates manual-triage label when flaw save fails."""
+    mock_exec_feature.side_effect = _canned_exec_feature
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    session.flaws.update.side_effect = RuntimeError("OSIDB write failed")
+    agent = MagicMock()
+
+    updater = FlawUpdater(session, agent, CVE_ID)
+    await updater.do()
+
+    session.flaws.labels.create.assert_called_once_with(
+        flaw_id=flaw_data["uuid"],
+        form_data=MANUAL_TRIAGE_LABEL,
+    )

@@ -254,6 +254,7 @@ class FlawUpdater:
                     "state": "NEW",
                 },
             )
+            self._info(f"created label '{label_name}'")
             return True
 
         except Exception as e:
@@ -294,7 +295,7 @@ class FlawUpdater:
                 raise
 
         # apply suggestions
-        await self.apply_suggestions()
+        all_ok = await self.apply_suggestions()
 
         if self.read_only:
             msg = f"read-only mode, skipping OSIDB update of {self.updated_fields}"
@@ -324,6 +325,9 @@ class FlawUpdater:
                 )
 
         except Exception as e:
+            # failed to save changes
+            all_ok = False
+
             msg_suffix = f"({e.__class__.__name__})"
             if flaw_saved:
                 self._warn(f"failed to save RH CVSS {msg_suffix}")
@@ -350,6 +354,9 @@ class FlawUpdater:
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
+
+        if not all_ok:
+            self.create_alias_label("manual-triage")
 
 
 class Bot:
