@@ -18,10 +18,10 @@ run-otel:
 # dev
 ############################################################################
 lint:
-	uvx ruff check
+	uv run ruff check
 
 format:
-	uvx ruff format
+	uv run ruff format
 
 check-type: fetch-deps
 	uvx ty check --exclude src/aegis_ai_ml
