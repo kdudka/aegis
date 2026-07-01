@@ -158,6 +158,26 @@ async def test_flaw_updater_aegis_meta_updated_by_suggestions(mock_exec_feature)
 
 @pytest.mark.asyncio
 @patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_flaw_updater_apply_suggestions_returns_true_on_success(
+    mock_exec_feature,
+):
+    """apply_suggestions() returns True when all features produce high-quality output."""
+    mock_exec_feature.side_effect = _canned_exec_feature
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    agent = MagicMock()
+
+    updater = FlawUpdater(session, agent, CVE_ID)
+    result = await updater.apply_suggestions()
+
+    assert result is True
+    assert updater.updated_fields
+    session.flaws.labels.create.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
 async def test_flaw_updater_aegis_meta_entry_structure(mock_exec_feature):
     """Each aegis_meta entry has type, value, explanation, and timestamp."""
     mock_exec_feature.side_effect = _canned_exec_feature
