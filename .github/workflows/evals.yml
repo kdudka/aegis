@@ -86,7 +86,7 @@ jobs:
         run: make eval
 
       - name: Upload Evals Log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: "aegis-evals.log"
           path: "${{ env.AEGIS_LOG_FILE }}"
