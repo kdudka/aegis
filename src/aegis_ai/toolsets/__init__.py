@@ -9,23 +9,42 @@ import time
 
 from typing import Any
 
-from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.toolsets import AbstractToolset, FunctionToolset, CombinedToolset
+from pydantic_ai.mcp import MCPToolset, StdioTransport
+from pydantic_ai.toolsets import (
+    AbstractToolset,
+    CombinedToolset,
+    FunctionToolset,
+    ToolsetTool,
+)
 from pydantic_ai.toolsets.wrapper import WrapperToolset
-from pydantic_ai._run_context import RunContext
+from pydantic_ai._run_context import AgentDepsT, RunContext
 
 from aegis_ai import get_settings
 
 from aegis_ai.toolsets.tools.osidb import osidb_toolset
-from aegis_ai.toolsets.tools.osvdev import osv_dev_cve_tool
+from aegis_ai.toolsets.tools.osv_dev_cve import osv_dev_cve_tool
+from aegis_ai.toolsets.tools.osv_dev_ghsa import osv_dev_ghsa_tool
 
 logger = logging.getLogger(__name__)
 
 
-class LoggingToolset(WrapperToolset):
-    async def call_tool(self, name: str, tool_args: dict, ctx: RunContext, tool):
+class LoggingToolset(WrapperToolset[AgentDepsT]):
+    async def call_tool(
+        self,
+        name: str,
+        tool_args: dict[str, Any],
+        ctx: RunContext[AgentDepsT],
+        tool: ToolsetTool[AgentDepsT],
+    ) -> Any:
         # log tool call entry
-        args = str(tool_args) if tool_args else ""
+        args = ""
+        if isinstance(tool_args, dict):
+            for field in ("input", "inputs"):
+                value = tool_args.get(field)
+                if value is not None:
+                    args = str(value)
+                    break
+
         prefix = f"[tool call] {name}({args})"
         start = time.time()
         logger.info(f"{prefix} started")
@@ -45,14 +64,15 @@ class LoggingToolset(WrapperToolset):
 # https://github.com/marcoeg/mcp-nvd
 #
 # requires NVD_API_KEY=
-nvd_stdio_server = MCPServerStdio(
-    "uv",
-    args=[
-        "run",
-        "mcp-nvd",
-    ],
-    tool_prefix="mitre_nvd",
-)
+nvd_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "mcp-nvd",
+        ],
+    ),
+).prefixed("mitre_nvd")
 
 # github-mcp: read only query against github.
 # https://hub.docker.com/r/mcp/github-mcp-server
@@ -63,54 +83,58 @@ nvd_stdio_server = MCPServerStdio(
 #
 # Use FQIN (ghcr.io/github/github-mcp-server) to avoid Podman short-name
 # resolution prompt when running without a TTY (e.g. web server, CI).
-github_stdio_server = MCPServerStdio(
-    "podman",
-    args=[
-        "run",
-        "-i",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "-e",
-        "GITHUB_TOOLSETS",
-        "-e",
-        "GITHUB_READ_ONLY",
-        "ghcr.io/github/github-mcp-server",
-    ],
-    env={
-        "GITHUB_PERSONAL_ACCESS_TOKEN": f"{os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')}",
-        "GITHUB_TOOLSETS": "repos,pull_requests",  # TODO: expand list of services at some point
-        "GITHUB_READ_ONLY": "1",
-    },
-    tool_prefix="github",
-)
+github_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "podman",
+        args=[
+            "run",
+            "--rm",
+            "-i",
+            "-e",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+            "-e",
+            "GITHUB_TOOLSETS",
+            "-e",
+            "GITHUB_READ_ONLY",
+            "ghcr.io/github/github-mcp-server",
+        ],
+        env={
+            "GITHUB_PERSONAL_ACCESS_TOKEN": f"{os.getenv('GITHUB_PERSONAL_ACCESS_TOKEN', '')}",
+            "GITHUB_TOOLSETS": "repos,pull_requests",  # TODO: expand list of services at some point
+            "GITHUB_READ_ONLY": "1",
+        },
+    ),
+).prefixed("github")
 
 # wikipedia-mcp: query wikipedia
 # https://github.com/rudra-ravi/wikipedia-mcp
 #
 # requires wikipedia PAT
-wikipedia_stdio_server = MCPServerStdio(
-    "uv",
-    args=[
-        "run",
-        "wikipedia-mcp",
-    ],
-    tool_prefix="wikipedia",
-)
+wikipedia_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "wikipedia-mcp",
+        ],
+    ),
+).prefixed("wikipedia")
 
 # mcp-pypi: query pypi
 # https://github.com/kimasplund/mcp-pypi
 #
-pypi_stdio_server = MCPServerStdio(
-    "uv",
-    args=[
-        "run",
-        "mcp-pypi",
-        "stdio",
-        "--cache-dir",
-        f"{get_settings().config_dir}/pypi-mcp",
-    ],
-    tool_prefix="pypi-mcp",
-)
+pypi_mcp_toolset = MCPToolset(
+    StdioTransport(
+        "uv",
+        args=[
+            "run",
+            "mcp-pypi",
+            "stdio",
+            "--cache-dir",
+            f"{get_settings().config_dir}/pypi-mcp",
+        ],
+    ),
+).prefixed("pypi-mcp")
 
 # Enable public function tools
 public_toolset_list = []
@@ -119,11 +143,6 @@ if get_settings().use_cwe_tool:
     from aegis_ai.toolsets.tools.cwe import cwe_toolset
 
     public_toolset_list.append(cwe_toolset)
-
-if get_settings().use_linux_cve_tool:
-    from aegis_ai.toolsets.tools.kernel_cves import kernel_cve_tool
-
-    public_toolset_list.append(FunctionToolset(tools=[kernel_cve_tool]))
 
 if get_settings().use_cisa_kev_tool:
     from aegis_ai.toolsets.tools.cisakev import cisa_kev_tool
@@ -137,7 +156,7 @@ if get_settings().use_tavily_tool:
     public_toolset_list.append(FunctionToolset(tools=[tavily_tool]))
 
 if get_settings().use_github_mcp_tool:
-    public_toolset_list.append(github_stdio_server)
+    public_toolset_list.append(github_mcp_toolset)
 
 if get_settings().use_wikipedia_tool:
     from aegis_ai.toolsets.tools.wikipedia import wikipedia_tool
@@ -145,29 +164,49 @@ if get_settings().use_wikipedia_tool:
     public_toolset_list.append(FunctionToolset(tools=[wikipedia_tool]))
 
 if get_settings().use_wikipedia_mcp_tool:
-    public_toolset_list.append(wikipedia_stdio_server)
+    public_toolset_list.append(wikipedia_mcp_toolset)
 
 if get_settings().use_pypi_mcp_tool:
-    public_toolset_list.append(pypi_stdio_server)
+    public_toolset_list.append(pypi_mcp_toolset)
+
+if get_settings().use_external_references_tool:
+    from aegis_ai.toolsets.tools.external_references import external_references_toolset
+
+    public_toolset_list.append(external_references_toolset)
 
 public_toolset = CombinedToolset(public_toolset_list)
 
 
 # Toolset containing rh specific tooling for CVE
-redhat_cve_toolset_list = [
+redhat_cve_toolset_list: list[AbstractToolset[Any]] = [
     osidb_toolset,
 ]
-
 redhat_cve_toolset = CombinedToolset(redhat_cve_toolset_list)
+
+# Kernel-only tools (classifier + linux CVE lookup) for per-run injection
+# into SuggestImpact so non-impact features never see kernel tool descriptions.
+kernel_extra_toolset_list: list[AbstractToolset[Any]] = []
+
+if get_settings().use_kernel_classifier:
+    from aegis_ai.toolsets.tools.kernel_classifier import kernel_impact_tool
+
+    kernel_extra_toolset_list.append(FunctionToolset(tools=[kernel_impact_tool]))
+
+if get_settings().use_linux_cve_tool:
+    from aegis_ai.toolsets.tools.kernel_cves import kernel_cve_tool
+
+    kernel_extra_toolset_list.append(FunctionToolset(tools=[kernel_cve_tool]))
+
+kernel_extra_toolset = CombinedToolset(kernel_extra_toolset_list)
 
 
 # Toolset containing generic tooling for CVE
 public_cve_toolset_list: list[AbstractToolset[Any]] = [
-    FunctionToolset(tools=[osv_dev_cve_tool]),
+    FunctionToolset(tools=[osv_dev_cve_tool, osv_dev_ghsa_tool]),
 ]
 
 if get_settings().use_nvd_dev_tool:
-    public_cve_toolset_list.append(nvd_stdio_server)
+    public_cve_toolset_list.append(nvd_mcp_toolset)
 
 public_cve_toolset = CombinedToolset(public_cve_toolset_list)
 
@@ -175,4 +214,5 @@ public_cve_toolset = CombinedToolset(public_cve_toolset_list)
 # chain logging wrappers
 public_toolset = LoggingToolset(public_toolset)
 redhat_cve_toolset = LoggingToolset(redhat_cve_toolset)
+kernel_extra_toolset = LoggingToolset(kernel_extra_toolset)
 public_cve_toolset = LoggingToolset(public_cve_toolset)

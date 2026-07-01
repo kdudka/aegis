@@ -1,5 +1,4 @@
 .attic/
-etc
 
 
 # Environment
@@ -23,6 +22,11 @@ htmlcov/
 
 # Local data
 *.log
+
+# Environment files (secrets)
+.env
+.env*
+!.env-example
 
 # Packaging
 dist/

@@ -1,6 +1,6 @@
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, PrivateAttr, model_validator
 
 from aegis_ai.data_models import CVEID, CVSS3Vector, CWEID
 from aegis_ai.features.data_models import AegisFeatureModel
@@ -35,6 +35,12 @@ class SuggestAffectedComponentsModel(AegisFeatureModel):
         description="Suggested affected component names.",
     )
 
+    ecosystems: List[str] = Field(
+        default_factory=list,
+        description="Package ecosystems impacted by this vulnerability. "
+        "Allowed values: cargo, golang, npm, pypi, maven, gem, upstream, unknown.",
+    )
+
     explanation: str = Field(
         ...,
         description="Rationale for component suggestions.",
@@ -42,6 +48,8 @@ class SuggestAffectedComponentsModel(AegisFeatureModel):
 
     def printable_outcome(self) -> str:
         """Override the logging hook to print the resulting suggestion."""
+        if self.ecosystems:
+            return f"{self.components} ecosystems={self.ecosystems}"
         return str(self.components)
 
 
@@ -63,16 +71,6 @@ class SuggestImpactModel(AegisFeatureModel):
         description="CVE title",
     )
 
-    components: List = Field(
-        ...,
-        description="List of potentially affected components",
-    )
-
-    affected_products: List = Field(
-        ...,
-        description="List of Red Hat potentially affected supported products",
-    )
-
     explanation: str = Field(
         ...,
         description="Explain rationale behind suggested CVSS 3.1 score and impact rating.",
@@ -91,9 +89,50 @@ class SuggestImpactModel(AegisFeatureModel):
         description="Suggested Red Hat CVSS3.1 vector",
     )
 
+    deescalation_rationale: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "If you are rating impact LOWER than the standard CVSS band would suggest, "
+            "explain the Red Hat policy justification here (e.g., 'AV:L + C:N/I:N + "
+            "contained BPF subsystem = MODERATE despite 7.5 CVSS'). "
+            "Leave empty/null when impact matches the standard CVSS band."
+        ),
+    )
+
+    classifier_disagreement_rationale: Optional[str] = Field(
+        default=None,
+        exclude=True,
+        description=(
+            "If the kernel_impact_tool predicted a DIFFERENT severity than your "
+            "assessment, explain why you disagree (e.g., 'classifier predicted "
+            "IMPORTANT but AV:P + s390-specific hardware limits real-world exposure "
+            "to MODERATE'). Leave empty/null when your impact matches the classifier "
+            "prediction or no classifier result is available."
+        ),
+    )
+
+    _classifier_diagnostics: Optional[Dict[str, Any]] = PrivateAttr(default=None)
+    _reconciliation_trace: Optional[str] = PrivateAttr(default=None)
+    _escalation_floor_applied: bool = PrivateAttr(default=False)
+    _original_llm_impact: Optional[str] = PrivateAttr(default=None)
+    _original_llm_score: Optional[str] = PrivateAttr(default=None)
+    _original_llm_vector: Optional[str] = PrivateAttr(default=None)
+    _explanation_revised: bool = PrivateAttr(default=False)
+
     def printable_outcome(self) -> str:
         """override the logging hook to print the resulting suggestion"""
         return f"{self.impact} {self.cvss3_score} {self.cvss3_vector}"
+
+
+class RevisedExplanationModel(BaseModel):
+    """Lightweight model for the follow-up LLM call that revises the
+    explanation after post-processing adjusted score or impact."""
+
+    explanation: str = Field(
+        ...,
+        description="Revised explanation consistent with the adjusted CVSS score and impact.",
+    )
 
 
 class SuggestCWEModel(AegisFeatureModel):
@@ -104,16 +143,6 @@ class SuggestCWEModel(AegisFeatureModel):
     cve_id: CVEID = Field(
         ...,  # Make it required
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
-    )
-
-    title: str = Field(
-        ...,
-        description="Contains CVE title",
-    )
-
-    components: List = Field(
-        ...,
-        description="List of affected components",
     )
 
     explanation: str = Field(
@@ -141,16 +170,6 @@ class PIIReportModel(AegisFeatureModel):
     cve_id: CVEID = Field(
         ...,  # Make it required
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
-    )
-
-    title: str = Field(
-        ...,
-        description="Contains CVE title",
-    )
-
-    components: List = Field(
-        ...,
-        description="List of affected components",
     )
 
     explanation: str = Field(
@@ -212,16 +231,6 @@ class SuggestStatementModel(AegisFeatureModel):
         description="CVE title",
     )
 
-    impact: Literal["", "LOW", "MODERATE", "IMPORTANT", "CRITICAL"] = Field(
-        ...,
-        description="CVE impact",
-    )
-
-    components: List = Field(
-        ...,
-        description="List of affected components",
-    )
-
     description: str = Field(
         ...,
         description="CVE description",
@@ -251,11 +260,6 @@ class CVSSDiffExplainerModel(AegisFeatureModel):
     cve_id: CVEID = Field(
         ...,  # Make it required
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
-    )
-
-    title: str = Field(
-        ...,
-        description="Contains CVE title",
     )
 
     redhat_cvss3_score: str = Field(
@@ -334,16 +338,6 @@ class CVSSDiffExplainerModel(AegisFeatureModel):
         """,
     )
 
-    components: List = Field(
-        ...,
-        description="List of affected components",
-    )
-
-    affected_products: List = Field(
-        ...,
-        description="List of Red Hat potentially affected supported products",
-    )
-
     statement: str = Field(..., description="redhat cve statement.")
 
     explanation: str = Field(
@@ -352,3 +346,150 @@ class CVSSDiffExplainerModel(AegisFeatureModel):
         Explain the difference between Red Hat and NVD(NIST) CVSS scores for this CVE.
         """,
     )
+
+
+# ---------------------------------------------------------------------------
+# Quality Review models
+# ---------------------------------------------------------------------------
+
+
+# Category weights from the FQI rubric specification.
+# Each category has 5 criteria scored 0-2 (max 10 raw points).
+# The weighted final score is on a 0.0-1.0 scale.
+CATEGORY_WEIGHTS: dict[str, float] = {
+    "Description - Technical Clarity": 0.20,
+    "Statement - Technical Clarity": 0.25,
+    "Mitigation": 0.10,
+    "Grammar & Style": 0.15,
+    "Content Ambiguity": 0.15,
+    "Technical Value": 0.15,
+}
+
+
+# Quality rating constants and type for the weighted 0.0-1.0 score.
+# Using Literal instead of Enum to avoid $defs in JSON schema, which
+# causes 400 errors with Mistral's grammar-based structured output.
+QualityRating = Literal["Excellent", "Good", "Needs Improvement", "Fails Standards"]
+
+RATING_EXCELLENT: QualityRating = "Excellent"
+RATING_GOOD: QualityRating = "Good"
+RATING_NEEDS_IMPROVEMENT: QualityRating = "Needs Improvement"
+RATING_FAILS_STANDARDS: QualityRating = "Fails Standards"
+
+
+class QualityReviewModel(AegisFeatureModel):
+    """
+    Quality review of CVE flaw content scored against a weighted rubric
+    with 6 categories (30 criteria), evaluated through a Customer Lens framework.
+    Final score is on a 0.0-1.0 weighted scale per the FQI specification.
+
+    Note: All fields use primitive types (no nested BaseModel classes) to avoid
+    $defs/$ref in the JSON schema, which Mistral's grammar-based structured
+    output cannot resolve.
+    """
+
+    cve_id: CVEID = Field(
+        ...,
+        description="The CVE identifier for the reviewed flaw.",
+    )
+
+    overall_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Weighted score on a 0.0-1.0 scale (auto-computed from criterion scores).",
+    )
+
+    rating: QualityRating = Field(
+        default=RATING_FAILS_STANDARDS,
+        description="Quality rating derived from overall_score (auto-computed).",
+    )
+
+    scores: List[Dict[str, Any]] = Field(
+        ...,
+        description="Flat list of all criterion scores across all 6 rubric categories. "
+        "Each entry is an object with: category (string), criterion_id (string), "
+        "score (integer 0-2), and justification (string).",
+    )
+
+    customer_can_decide: List[str] = Field(
+        ...,
+        description="What a customer CAN decide from the current content.",
+    )
+    remains_unclear: List[str] = Field(
+        ...,
+        description="What REMAINS UNCLEAR from the current content.",
+    )
+    manual_context_needed: List[str] = Field(
+        ...,
+        description="What additional context an analyst would need to add MANUALLY.",
+    )
+
+    strengths: List[str] = Field(
+        ...,
+        description="Notable strengths of the flaw content.",
+    )
+
+    critical_gaps: List[str] = Field(
+        ...,
+        description="Critical gaps that must be addressed.",
+    )
+
+    recommendations: List[str] = Field(
+        ...,
+        description="Actionable recommendations to improve the content.",
+    )
+
+    suggested_statement: Optional[str] = Field(
+        default=None,
+        description="Suggested rewrite of the statement when current content scores poorly.",
+    )
+
+    suggested_mitigation: Optional[str] = Field(
+        default=None,
+        description="Suggested rewrite of the mitigation when current content scores poorly.",
+    )
+
+    value_add: str = Field(
+        ...,
+        description="Whether this assessment provides information customers cannot find elsewhere.",
+    )
+
+    explanation: str = Field(
+        ...,
+        description="Brief summary of the quality review findings, highlighting the most significant strengths and gaps.",
+    )
+
+    @model_validator(mode="after")
+    def compute_overall_score_and_rating(self) -> "QualityReviewModel":
+        """Auto-compute weighted overall_score and rating from criterion scores.
+
+        Groups criterion scores by category, sums each category's raw points
+        (0-10), then applies FQI category weights to produce a 0.0-1.0 score.
+        """
+        # Sum raw points per category
+        cat_raw: dict[str, int] = {}
+        for c in self.scores:
+            cat_raw[c["category"]] = cat_raw.get(c["category"], 0) + c["score"]
+
+        # Compute weighted score: sum(category_raw / 10.0 * weight)
+        weighted = 0.0
+        for cat_name, weight in CATEGORY_WEIGHTS.items():
+            raw = min(cat_raw.get(cat_name, 0), 10)  # clamp to max 10 per category
+            weighted += (raw / 10.0) * weight
+        self.overall_score = round(weighted, 2)
+
+        # Derive rating from weighted score
+        if self.overall_score >= 0.8:
+            self.rating = RATING_EXCELLENT
+        elif self.overall_score >= 0.6:
+            self.rating = RATING_GOOD
+        elif self.overall_score >= 0.4:
+            self.rating = RATING_NEEDS_IMPROVEMENT
+        else:
+            self.rating = RATING_FAILS_STANDARDS
+        return self
+
+    def printable_outcome(self) -> str:
+        """Override the logging hook to print the quality score and rating."""
+        return f"score={self.overall_score}/1.0 ({self.rating})"

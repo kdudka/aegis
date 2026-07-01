@@ -166,9 +166,15 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Claude
+/.claude
+
 # Aegis specific
 .attic
 Makefile
 notes.org
 tmp/
+
+# IDE configuration
+.cursor/
 

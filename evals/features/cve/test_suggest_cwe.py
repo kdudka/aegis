@@ -10,6 +10,7 @@ from aegis_ai.features.cve import SuggestCWE, SuggestCWEModel
 
 from evals.features.common import (
     common_feature_evals,
+    create_llm_judge,
     reflect_confidence,
     run_evaluation,
 )
@@ -74,8 +75,13 @@ async def suggest_cwe(cve_id: CVEID) -> SuggestCWEModel:
 # TODO: gradually remove known_to_fail_evaluators annotations where possible
 cases = [
     SuggestCweCase(
+        cve_id="CVE-2019-25544",
+        cwe_list=["CWE-1284"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
         cve_id="CVE-2022-48701",
-        cwe_list=["CWE-125", "CWE-20"],
+        cwe_list=["CWE-125"],
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
@@ -91,6 +97,7 @@ cases = [
         # kdudka: CWE-131 is closely related and applicable IMO
         cve_id="CVE-2022-50235",
         cwe_list=["CWE-805", "CWE-131"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2022-50333",
@@ -103,13 +110,20 @@ cases = [
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
+        # Aegis sometimes suggests broader CWE-190 for this signed left-shift overflow
         cve_id="CVE-2022-50390",
         cwe_list=["CWE-1335"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2022-50421",
         cwe_list=["CWE-1341"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2022-50439",
@@ -119,13 +133,23 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2022-50448",
         cwe_list=["CWE-477"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     # FIXME: Aegis occasionally ends up with an empty list when CWE-416 and CWE-415 are filtered out
     SuggestCweCase(
         cve_id="CVE-2022-50470",
         cwe_list=["CWE-1341"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2022-50471",
@@ -164,12 +188,22 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53116",
         cwe_list=["CWE-763"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53123",
         cwe_list=["CWE-763"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53165",
@@ -179,11 +213,24 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53174",
         cwe_list=["CWE-772", "CWE-459"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53176",
         cwe_list=["CWE-772", "CWE-825"],  # kdudka: added CWE-825
+        metadata={
+            "known_to_fail_evaluators": [
+                # Aegis explains a stale pointer dereference but CWE-911
+                # (Improperly Implemented Security Check) does not relate
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53188",
@@ -217,7 +264,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53487",
         cwe_list=["CWE-276"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53499",
@@ -231,7 +283,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53519",
         cwe_list=["CWE-820"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53525",
@@ -249,13 +306,8 @@ cases = [
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
-        cve_id="CVE-2023-53843",
-        cwe_list=["CWE-1284", "CWE-1285", "CWE-681"],  # kdudka: added CWE-1285
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
-    ),
-    SuggestCweCase(
         cve_id="CVE-2023-53555",
-        cwe_list=["CWE-824"],
+        cwe_list=["CWE-824", "CWE-476"],  # kdudka: added CWE-476
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53590",
@@ -265,6 +317,7 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53625",
         cwe_list=["CWE-476"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53659",
@@ -278,11 +331,22 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53764",
         cwe_list=["CWE-414", "CWE-413"],  # kdudka: added CWE-413
+        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2023-53843",
+        cwe_list=["CWE-1284", "CWE-1285", "CWE-681"],  # kdudka: added CWE-1285
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2023-54201",
         cwe_list=["CWE-911", "CWE-191"],  # kdudka: added CWE-191
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2024-41010",
@@ -297,7 +361,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2024-53152",
         cwe_list=["CWE-459"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2024-53161",
@@ -315,7 +384,13 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2024-56658",
-        cwe_list=["CWE-825"],
+        cwe_list=["CWE-825", "CWE-826"],  # kdudka: added CWE-826
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-5302",
@@ -324,7 +399,7 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2025-5399",
-        cwe_list=["CWE-835", "CWE-400"],
+        cwe_list=["CWE-835", "CWE-770"],
     ),
     SuggestCweCase(
         cve_id="CVE-2025-6547",
@@ -343,11 +418,17 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2025-9390",
-        cwe_list=["CWE-120"],
+        cwe_list=["CWE-120", "CWE-131", "CWE-787"],  # kdudka: added CWE-131 and CWE-787
     ),
     SuggestCweCase(
         cve_id="CVE-2025-9394",
         cwe_list=["CWE-825"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-11429",
@@ -370,7 +451,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-21690",
         cwe_list=["CWE-779"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-21879",
@@ -379,12 +465,22 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2025-22097",
-        cwe_list=["CWE-824", "CWE-825"],
+        cwe_list=[
+            "CWE-824",
+            "CWE-825",
+            "CWE-772",
+        ],  # kdudka: broader lifetime/cleanup alternative is plausible here
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-22115",
         cwe_list=["CWE-413"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ],
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-23130",
@@ -400,7 +496,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-26503",
         cwe_list=["CWE-120", "CWE-787", "CWE-124"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-37996",
@@ -409,12 +510,22 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-38000",
         cwe_list=["CWE-763", "CWE-825"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-38001",
         cwe_list=["CWE-825"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-38509",
@@ -437,11 +548,17 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-38575",
         cwe_list=["CWE-212"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-38587",
         cwe_list=["CWE-835"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-38691",
@@ -455,10 +572,20 @@ cases = [
         cve_id="CVE-2025-39677",
         cwe_list=["CWE-191"],
     ),
+    # Aegis suggests CWE-823 (Unnecessary Inclusion of Sensitive Information in Debug Log)
+    # while explaining "memory allocation failures and out-of-range memory access".
+    # The model appears to confuse the `arm_smmu_context_fault` log output in the bug
+    # description with an information-disclosure weakness, producing an incoherent
+    # CWE/explanation pair. The correct CWE is CWE-358 (missing IOMMU workaround entry).
     SuggestCweCase(
         cve_id="CVE-2025-39739",
         cwe_list=["CWE-358"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39750",
@@ -468,11 +595,24 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-39754",
         cwe_list=["CWE-820", "CWE-413"],  # kdudka: added CWE-413
+        # LLM returns CWE-708 (Incorrect Ownership Assignment) instead of
+        # CWE-820/CWE-413 (Missing Synchronization / Improper Resource Locking).
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39782",
         cwe_list=["CWE-413", "CWE-821", "CWE-833"],  # kdudka: added CWE-821 and CWE-833
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39791",
@@ -503,7 +643,7 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39810",
-        cwe_list=["CWE-131"],
+        cwe_list=["CWE-131", "CWE-787"],  # kdudka: added CWE-787
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39816",
@@ -529,18 +669,29 @@ cases = [
         cwe_list=["CWE-825"],
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
+    # LLM judge says the explanation incorrectly equates CWE-825 (Expired
+    # Pointer Dereference) with use-after-free.
     SuggestCweCase(
         cve_id="CVE-2025-39864",
         cwe_list=["CWE-763", "CWE-825"],
+        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39865",
         cwe_list=["CWE-476"],
     ),
+    # LLM judge hallucinated CWE-366 name ("Improper Handling of File Names")
+    # when CWE-366 is actually "Race Condition within a Thread" — which does
+    # relate to the race condition → UAF flaw described in the explanation.
     SuggestCweCase(
         cve_id="CVE-2025-39866",
         cwe_list=["CWE-825"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39915",
@@ -572,19 +723,32 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-40109",
         cwe_list=["CWE-331"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-40265",
         cwe_list=["CWE-252", "CWE-253"],  # kdudka: added CWE-253
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-40779",
         cwe_list=["CWE-617", "CWE-476"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-43529",
         cwe_list=["CWE-825"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-49133",
@@ -597,7 +761,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-52494",
         cwe_list=["CWE-770"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-54770",
@@ -607,6 +776,7 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-54771",
         cwe_list=["CWE-825"],
+        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-55559",
@@ -619,12 +789,42 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2025-57803",
-        cwe_list=["CWE-787", "CWE-131"],
+        cwe_list=[
+            "CWE-787",
+            "CWE-131",
+            "CWE-190",
+            "CWE-805",
+        ],  # kdudka: added CWE-190 and CWE-805
     ),
     SuggestCweCase(
         cve_id="CVE-2025-58446",
         cwe_list=["CWE-770"],
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    # Aegis explains a plausible flaw (improper file extraction / input validation)
+    # but neither suggested CWE (CWE-641, CWE-1286) relates to that description.
+    SuggestCweCase(
+        cve_id="CVE-2025-59031",
+        cwe_list=["CWE-611", "CWE-22"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
+    ),
+    # Aegis describes improper input validation causing a crash on malformed SASL
+    # response, but suggests injection-related CWEs (CWE-1286, CWE-1287) instead
+    # of a general input parsing/validation CWE.
+    SuggestCweCase(
+        cve_id="CVE-2025-59032",
+        cwe_list=["CWE-229"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-59303",
@@ -663,7 +863,12 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-61984",
         cwe_list=["CWE-78"],
-        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
     ),
     SuggestCweCase(
         cve_id="CVE-2025-61985",
@@ -678,13 +883,167 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-67639",
         cwe_list=["CWE-613"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2025-69196",
+        cwe_list=["CWE-1220"],
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-3608",
+        cwe_list=["CWE-617"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-3644",
+        cwe_list=["CWE-791"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "SuggestCweEvaluator",
+                "CWEExplanationRootCause",
+            ]
+        },
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-25780",
+        cwe_list=["CWE-770"],
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-26740",
+        cwe_list=["CWE-131", "CWE-787", "CWE-805"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-26939",
+        cwe_list=["CWE-1220", "CWE-862", "CWE-266"],
+        metadata={
+            "known_to_fail_evaluators": [
+                "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
+            ]
+        },
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-27651",
+        cwe_list=["CWE-476"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-27784",
+        cwe_list=["CWE-190", "CWE-131", "CWE-805", "CWE-787", "CWE-120", "CWE-125"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    # Aegis suggests CWE-1050 (Excessive Platform Resource Consumption within a Loop),
+    # possibly a reasonable alternative for the Dovecot RFC 2231 MIME parameter CPU DoS.
+    # Consider broadening cwe_list to ["CWE-770", "CWE-1050"] if CWE-1050 is accepted.
+    SuggestCweCase(
+        cve_id="CVE-2026-27859",
+        cwe_list=["CWE-770"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-28500",
+        cwe_list=["CWE-829"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-29063",
+        cwe_list=["CWE-915"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-31966",
+        cwe_list=["CWE-125"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-31969",
+        cwe_list=["CWE-787", "CWE-193"],  # kdudka: added CWE-193
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-31970",
+        cwe_list=["CWE-190", "CWE-131", "CWE-787"],  # kdudka: added CWE-131 and CWE-787
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-31971",
+        cwe_list=["CWE-131", "CWE-130", "CWE-805"],  # CWE-130, CWE-805 added by kdudka
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-31973",
+        cwe_list=["CWE-476"],
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-32636",
+        cwe_list=["CWE-787"],
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-33001",
+        cwe_list=["CWE-22", "CWE-59"],
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-33002",
+        cwe_list=["CWE-346", "CWE-940"],  # kdudka: added CWE-940
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-33551",
+        cwe_list=["CWE-266"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    # Aegis suggests CWE-763 (Release of Invalid Pointer or Reference) —
+    # same CWE-404 family as CWE-1341/CWE-415 but not a precise match for double-free.
+    SuggestCweCase(
+        cve_id="CVE-2026-33995",
+        cwe_list=["CWE-1341", "CWE-415"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-34785",
+        cwe_list=["CWE-552", "CWE-73", "CWE-22", "CWE-41"],  # kdudka: added CWE-41
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-35535",
+        cwe_list=["CWE-272", "CWE-273"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-35536",
+        cwe_list=["CWE-88", "CWE-140", "CWE-93"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-35540",
+        cwe_list=["CWE-918"],
+        metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
+    ),
+    SuggestCweCase(
+        cve_id="CVE-2026-40223",
+        cwe_list=["CWE-617"],
     ),
 ]
 
 # evaluators
 evals = common_feature_evals + [
     SuggestCweEvaluator(),
+    create_llm_judge(
+        assertion_name="CWEExplanationRootCause",
+        rubric=(
+            "Pass if the explanation is non-empty and describes a plausible technical weakness (memory, sync, "
+            "injection, resource handling, auth, etc.). CWE selection is often debatable; ranked lists may include "
+            "imperfect secondary IDs. Do not fail because one CWE in the list is a stretch or contradicts the narrative "
+            "while another CWE in the same list fits. Fail only if the explanation is empty, incoherent, or none of the "
+            "listed CWEs could reasonably relate to the described flaw."
+        ),
+    ),
 ]
 
 # needed for asyncio event loop

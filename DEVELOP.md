@@ -207,25 +207,10 @@ podman run --rm -it -v /etc/krb5.conf:/etc/krb5.conf -p 9000:9000 localhost/aegi
 
 Aegis uses semantic versioning for stable releases and `hatch-vcs` for development snapshots.
 
-1.  **Update Changelog**: Add the release notes to `docs/CHANGELOG.md`.
-2.  **Sync Lockfile**: Update `uv.lock` by running `make` or `uv lock`.
-3.  **Submit PR**: Create a pull request, get it reviewed, and merge it into the `main` branch.
+1.  **Sync Lockfile**: Update `uv.lock` by running `make upgrade-deps`.
+2.  **Update Changelog**: Add the release notes to `docs/CHANGELOG.md`.
+3.  **Submit PR**: Create a pull request and get it reviewed.
 4.  **Merge PR**: Merge the pull request to the `main` branch.  This will trigger a new build of a container image that will be tagged into `:latest` and automatically deployed on the staging environment.
 5.  **Test the release candidate**: Test the automatically deployed image in the staging environment.
 6.  **Push a git tag**: Create a new signed git tag (e.g. `0.3.0`) and push it to the upstream git repository on GitHub.  This will trigger a new build of a container image that will be tagged into `:stable` (and e.g. `:0.3.0`) and automatically deployed on the production environment.
-6.  **Create a GitHub Release**: Create a new release on GitHub from the git tag.
-
-
-#### Build and Publish to PyPI
-
-1.  **Build the Distribution**:
-    ```bash
-    make build-dist
-    ```
-2.  **Publish to PyPI**: Set your credentials and run the publish command.
-    ```bash
-    export TWINE_USERNAME=__token__
-    export TWINE_PASSWORD=pypi-your-long-api-token-string-here
-
-    make publish-dist
-    ```
+7.  **Create a GitHub Release**: Create a new release on GitHub from the git tag.  This will trigger an automatic build published on PyPI.
