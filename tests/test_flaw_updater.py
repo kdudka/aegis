@@ -252,6 +252,7 @@ async def test_flaw_updater_read_only_skips_osidb_writes(mock_exec_feature):
 
     assert updater.updated_fields
     session.flaws.update.assert_not_called()
+    session.flaws.labels.create.assert_not_called()
     assert "processed" not in flaw_data.get("aegis_meta", {})
 
 
@@ -406,6 +407,25 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
             assert entry["data_quality"] == LOW_QUALITY
             assert entry["confidence"] == LOW_CONFIDENCE
             datetime.fromisoformat(entry["timestamp"])
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_flaw_updater_read_only_no_manual_triage_label(mock_exec_feature):
+    """FlawUpdater.do() with read_only=True skips manual-triage label even on failure."""
+    mock_exec_feature.side_effect = AsyncMock(
+        side_effect=RuntimeError("feature failed")
+    )
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    agent = MagicMock()
+
+    updater = FlawUpdater(session, agent, CVE_ID, read_only=True)
+    await updater.do()
+
+    session.flaws.update.assert_not_called()
+    session.flaws.labels.create.assert_not_called()
 
 
 MANUAL_TRIAGE_LABEL = {
