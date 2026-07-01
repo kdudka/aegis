@@ -239,7 +239,24 @@ class FlawUpdater:
             self._warn("left unchanged")
             return False
 
-        return all_ok
+        if not all_ok:
+            # something has already failed
+            return False
+
+        aegis_meta = self.flaw_data.get("aegis_meta", {})
+        if not isinstance(aegis_meta, dict):
+            self._warn("unexpected type of aegis_meta")
+            return False
+
+        # if everything is OK check that no suggestion was discarded with this timestamp
+        return not any(
+            entry.get("type", "") == "AI-Bot-Skipped"
+            and entry.get("timestamp", None) == timestamp.isoformat()
+            for sublist in aegis_meta.values()
+            if isinstance(sublist, list)  # skip over ["processed"], which is bool
+            for entry in sublist
+            if isinstance(entry, dict)  # guard against malformed OSIDB data
+        )
 
     def create_alias_label(self, label_name: str) -> bool:
         """create a flaw label of type "alias" with name label_name, return True on success"""
