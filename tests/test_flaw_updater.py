@@ -507,6 +507,38 @@ async def test_flaw_updater_do_creates_manual_triage_label_on_all_skipped(
 
 @pytest.mark.asyncio
 @patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_flaw_updater_do_creates_manual_triage_label_on_partial_failure(
+    mock_exec_feature,
+):
+    """FlawUpdater.do() creates manual-triage label when some features fail mid-run."""
+
+    async def _partial_failure_exec(feature, flaw_data):
+        name = feature.__class__.__name__
+        if name == "SuggestCWE":
+            raise RuntimeError("CWE feature crashed")
+        return await _canned_exec_feature(feature, flaw_data)
+
+    mock_exec_feature.side_effect = _partial_failure_exec
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    agent = MagicMock()
+
+    updater = FlawUpdater(session, agent, CVE_ID)
+    await updater.do()
+
+    assert updater.updated_fields
+    assert "cwe_id" not in updater.updated_fields
+    assert flaw_data["aegis_meta"].get("processed") is True
+
+    session.flaws.labels.create.assert_called_once_with(
+        flaw_id=flaw_data["uuid"],
+        form_data=MANUAL_TRIAGE_LABEL,
+    )
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
 async def test_flaw_updater_do_creates_manual_triage_label_on_save_failure(
     mock_exec_feature,
 ):
