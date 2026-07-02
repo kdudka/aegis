@@ -34,6 +34,13 @@ import aegis_ai.toolsets.tools.osidb as osidb_tool
 
 logger = logging.getLogger(__name__)
 
+# Classifier feature -> OSIDB label name.
+# Multiple features can map to the same label (deduped).
+_FLAG_TO_LABEL: dict[str, str] = {
+    "kernel_panic": "kpanic",
+    "kernel_panic_plus_uaf": "kpanic",
+}
+
 
 class SuggestImpact(Feature):
     """Based on current CVE information and context assert an aggregated impact."""
@@ -507,6 +514,14 @@ class SuggestImpact(Feature):
 
         result.output._classifier_diagnostics = classifier_result
         result.output._reconciliation_trace = trace
+
+        # Map classifier feature flags to OSIDB label names so the bot
+        # can create FlawLabel records (e.g. "kpanic") after saving the flaw.
+        if classifier_result and isinstance(classifier_result, dict):
+            active = classifier_result.get("active_features", [])
+            result.output._flags = sorted(
+                set(_FLAG_TO_LABEL[f] for f in active if f in _FLAG_TO_LABEL)
+            )
 
         return result
 

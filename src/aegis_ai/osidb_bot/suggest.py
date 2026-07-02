@@ -8,6 +8,7 @@ from pydantic_ai import Agent
 from datetime import datetime
 from typing import Any, Optional
 
+_KERNEL_FLAGS_KEY = "kernel_flags"
 
 # define the quality of suggestions that we accept
 METRICS_THR = {
@@ -248,6 +249,21 @@ async def suggest_impact(agent: Agent, flaw_data: FlawData, ts: datetime) -> set
     }
     flaw_data["cvss_scores"] = [rh_cvss]
     changed.add("cvss_scores")
+
+    # persist kernel classifier flags for provenance and label creation
+    if output._flags:
+        aegis_meta = flaw_data.setdefault("aegis_meta", {})
+        dst_field = aegis_meta.setdefault(_KERNEL_FLAGS_KEY, [])
+        dst_field.append(
+            {
+                "type": "AI-Bot",
+                "value": output._flags,
+                "explanation": output.explanation,
+                "timestamp": ts.isoformat(),
+            }
+        )
+        changed.add(_KERNEL_FLAGS_KEY)
+
     return changed
 
 

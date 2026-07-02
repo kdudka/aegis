@@ -1,6 +1,6 @@
 from aegis_ai import get_settings
 from aegis_ai.osidb_bot.state import BotState, StateFileHandler
-from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST
+from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST, _KERNEL_FLAGS_KEY
 from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 from aegis_ai.data_models import CVEID
 
@@ -233,6 +233,38 @@ class FlawUpdater:
             # nothing has changed
             raise RuntimeError("left unchanged")
 
+    def _create_labels(self, flaw_uuid: str) -> None:
+        assert self.flaw_data
+        entries = self.flaw_data.get("aegis_meta", {}).get(_KERNEL_FLAGS_KEY, [])
+        labels: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                val = entry.get("value", [])
+                if isinstance(val, list):
+                    labels.extend(val)
+        labels = list(dict.fromkeys(labels))
+
+        any_failed = False
+        for label_name in labels:
+            try:
+                cast(Any, self.osidb.flaws).labels.create(
+                    flaw_id=flaw_uuid,
+                    form_data={
+                        "label": label_name,
+                        "type": "alias",
+                        "state": "NEW",
+                    },
+                )
+            except Exception as e:
+                self._warn(
+                    f"failed to create label '{label_name}' ({e.__class__.__name__})"
+                )
+                logger.debug("%s: %s", self.cve, e)
+                any_failed = True
+
+        if any_failed:
+            self.updated_fields.discard(_KERNEL_FLAGS_KEY)
+
     async def do(self) -> None:
         assert self.flaw_data
 
@@ -296,6 +328,9 @@ class FlawUpdater:
 
             # log full exception in debug mode only
             logger.debug(f"{self.cve}: {str(e)}")
+
+        if _KERNEL_FLAGS_KEY in self.updated_fields:
+            self._create_labels(flaw_uuid)
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
