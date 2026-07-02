@@ -233,7 +233,28 @@ class FlawUpdater:
             # nothing has changed
             raise RuntimeError("left unchanged")
 
-    def _create_labels(self, flaw_uuid: str) -> None:
+    def create_alias_label(self, label_name: str) -> bool:
+        """create a flaw label of type "alias" with name label_name, return True on success"""
+        assert self.flaw_data
+        try:
+            flaw_uuid = self.flaw_data["uuid"]
+            cast(Any, self.osidb.flaws).labels.create(
+                flaw_id=flaw_uuid,
+                form_data={
+                    "label": label_name,
+                    "type": "alias",
+                    "state": "NEW",
+                },
+            )
+            return True
+
+        except Exception as e:
+            msg = f"failed to create label '{label_name}' ({e.__class__.__name__})"
+            self._warn(msg)
+            logger.debug("%s: %s", self.cve, e)
+            return False
+
+    def _create_labels(self) -> None:
         assert self.flaw_data
         entries = self.flaw_data.get("aegis_meta", {}).get(_KERNEL_FLAGS_KEY, [])
         labels: list[str] = []
@@ -246,20 +267,7 @@ class FlawUpdater:
 
         any_failed = False
         for label_name in labels:
-            try:
-                cast(Any, self.osidb.flaws).labels.create(
-                    flaw_id=flaw_uuid,
-                    form_data={
-                        "label": label_name,
-                        "type": "alias",
-                        "state": "NEW",
-                    },
-                )
-            except Exception as e:
-                self._warn(
-                    f"failed to create label '{label_name}' ({e.__class__.__name__})"
-                )
-                logger.debug("%s: %s", self.cve, e)
+            if not self.create_alias_label(label_name):
                 any_failed = True
 
         if any_failed:
@@ -330,7 +338,7 @@ class FlawUpdater:
             logger.debug(f"{self.cve}: {str(e)}")
 
         if _KERNEL_FLAGS_KEY in self.updated_fields:
-            self._create_labels(flaw_uuid)
+            self._create_labels()
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
