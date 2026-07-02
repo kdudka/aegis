@@ -16,7 +16,7 @@ jobs:
     if: "${{ !contains(github.event.pull_request.body || '', 'CI: skip-pr-evals') }}"
     name: Run evaluation suite
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       # make the tables in pydantic-eval reports readable
       COLUMNS: 512
