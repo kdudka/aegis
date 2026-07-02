@@ -17,9 +17,6 @@ from aegis_ai.features.cve.data_models import SuggestImpactModel
 from aegis_ai.osidb_bot.bot import FlawUpdater
 
 
-pytestmark = pytest.mark.asyncio
-
-
 CVE_ID = "CVE-2025-99999"
 
 _DISCLAIMER = (
@@ -168,6 +165,7 @@ async def _canned_exec_feature_with_flags(feature, flaw_data):
     raise ValueError(f"Unknown feature: {name}")
 
 
+@pytest.mark.asyncio
 class TestSuggestImpactExecFlagsPopulation:
     """Verify that SuggestImpact.exec() populates _flags from classifier active_features."""
 
@@ -291,6 +289,7 @@ class TestSuggestImpactExecFlagsPopulation:
         assert result.output._flags == ["kpanic"]
 
 
+@pytest.mark.asyncio
 class TestSuggestImpactAegisMetaKernelFlags:
     """Test that suggest_impact() writes kernel_flags to aegis_meta."""
 
@@ -342,6 +341,7 @@ class TestSuggestImpactAegisMetaKernelFlags:
         assert "kernel_flags" not in flaw_data.get("aegis_meta", {})
 
 
+@pytest.mark.asyncio
 class TestFlawUpdaterLabelCreation:
     """Test that FlawUpdater.do() creates alias labels for kernel_flags."""
 
