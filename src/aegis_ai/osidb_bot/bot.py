@@ -265,12 +265,12 @@ class FlawUpdater:
                     labels.extend(val)
         labels = list(dict.fromkeys(labels))
 
-        any_failed = False
+        any_update = False
         for label_name in labels:
-            if not self.create_alias_label(label_name):
-                any_failed = True
+            if self.create_alias_label(label_name):
+                any_update = True
 
-        if any_failed:
+        if not any_update:
             self.updated_fields.discard(_KERNEL_FLAGS_KEY)
 
     async def do(self) -> None:
