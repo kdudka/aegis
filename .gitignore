@@ -178,3 +178,4 @@ tmp/
 # IDE configuration
 .cursor/
 
+kernel_flaw_owners.txt
