@@ -74,6 +74,7 @@ MAX_CONTENT_LENGTH = 8000
 MAX_READ_BYTES = 512 * 1024
 MAX_CONCURRENT_FETCHES = 5
 FETCH_TIMEOUT_SECONDS = 10
+TOTAL_FETCH_TIMEOUT_SECONDS = 30
 
 
 class ExternalReferenceInput(BaseToolInput):
@@ -362,8 +363,24 @@ async def external_references_tool(
             return await fetch_reference(u)
 
     logger.info("Fetching %d external reference(s)...", len(unique_urls))
-    results = await asyncio.gather(*[_guarded(u) for u in unique_urls])
-    return list(results)
+    tasks = [asyncio.create_task(_guarded(u)) for u in unique_urls]
+    results: list[ExternalReferenceResult] = []
+    try:
+        async with asyncio.timeout(TOTAL_FETCH_TIMEOUT_SECONDS):
+            for coro in asyncio.as_completed(tasks):
+                results.append(await coro)
+    except asyncio.TimeoutError:
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        dropped = len(unique_urls) - len(results)
+        logger.warning(
+            "Total fetch timeout (%ds) reached — returning %d result(s), dropped %d",
+            TOTAL_FETCH_TIMEOUT_SECONDS,
+            len(results),
+            dropped,
+        )
+    return results
 
 
 external_references_toolset = FunctionToolset(tools=[external_references_tool])
