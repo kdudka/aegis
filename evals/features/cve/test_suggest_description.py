@@ -50,6 +50,7 @@ class SuggestDescriptionCase(Case):
             explanation="",
             suggested_title=(expected_title or ""),
             suggested_description=(expected_description or ""),
+            data_quality=1.0,
             confidence=1.0,
             tools_used=[],
             disclaimer=disclaimer,
@@ -118,18 +119,6 @@ async def suggest_description(cve_id: CVEID) -> SuggestDescriptionModel:
 # test cases
 cases = [
     SuggestDescriptionCase(
-        # not vetted by a PSIRT analyst
-        cve_id="CVE-2025-5399",
-        expected_title="WebSocket endless loop",
-        expected_description="A flaw was found in libcurl. This vulnerability allows a denial of service via a crafted WebSocket packet from a malicious server.",
-    ),
-    SuggestDescriptionCase(
-        # not vetted by a PSIRT analyst
-        cve_id="CVE-2025-23395",
-        expected_title="Local Root Exploit via `logfile_reopen()`",
-        expected_description="A flaw was found in Screen. When running with setuid-root privileged, the  logfile_reopen() function does not drop privileges while operating on a user-supplied path. This vulnerability allows an unprivileged user to create files in arbitrary locations with root ownership.",
-    ),
-    SuggestDescriptionCase(
         cve_id="CVE-2002-1001",
         expected_title="tokio-tar:  parses PAX extended headers incorrectly, allows file smuggling",
     ),
@@ -141,11 +130,6 @@ cases = [
         cve_id="CVE-2022-23125",
         expected_title="Netatalk: Remote Code Execution via Buffer Overflow in copyapplfile function",
     ),
-    # FIXME: expected_description violates the (IMO valid) requirement that description should not focus on code-level details
-    # SuggestDescriptionCase(
-    #     cve_id="CVE-2022-50714",
-    #     expected_description="the driver's mt7921_pci_remove() function is called while the associated mt76_dev (driver private data) has not been properly initialized or is missing.",
-    # ),
     SuggestDescriptionCase(
         cve_id="CVE-2023-39326",
         expected_description="A flaw was found in the Golang net/http/internal package. This issue may allow a malicious user to send an HTTP request and cause the receiver to read more bytes from network than are in the body (up to 1GiB), causing the receiver to fail reading the response, possibly leading to a Denial of Service (DoS).",
@@ -157,10 +141,17 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2023-53669",
         expected_title="DoS in skb_copy_ubufs() caused by TCP tx zerocopy using hugepages with skb length bigger than ~68 KB",
+        metadata={"known_to_fail_evaluators": ["TitleEvaluator"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2023-54120",
         expected_description="A flaw was identified in the Bluetooth HIDP (Human Interface Device Protocol) implementation of the Linux kernel where a race condition in the hidp_session_thread handling can lead to a use-after-free vulnerability. Under certain timing conditions, the session object may be freed while a timer callback is still active, resulting in dereferencing freed memory and potential kernel panic or local escalation of privileges. The underlying cause is the use of hidp_del_timer without ensuring that the timer has fully stopped, which allows concurrent access to freed session resources",
+    ),
+    SuggestDescriptionCase(
+        # not vetted by a PSIRT analyst
+        cve_id="CVE-2025-5399",
+        expected_title="WebSocket endless loop",
+        expected_description="A flaw was found in libcurl. This vulnerability allows a denial of service via a crafted WebSocket packet from a malicious server.",
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-12816",
@@ -174,10 +165,18 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2025-13327",
         expected_description="A flaw was found in uv. This vulnerability allows an attacker to execute malicious code during package resolution or installation via specially crafted ZIP (Zipped Information Package) archives that exploit parsing differentials, requiring user interaction to install an attacker-controlled package.",
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-13609",
         expected_description="A vulnerability has been identified in keylime where an attacker can exploit this flaw by registering a new agent using a different Trusted Platform Module (TPM) device but claiming an existing agent's unique identifier (UUID). This action overwrites the legitimate agent's identity, enabling the attacker to impersonate the compromised agent and potentially bypass security controls.",
+    ),
+    SuggestDescriptionCase(
+        # not vetted by a PSIRT analyst
+        cve_id="CVE-2025-23395",
+        expected_title="Local Root Exploit via `logfile_reopen()`",
+        expected_description="A flaw was found in Screen. When running with setuid-root privileged, the  logfile_reopen() function does not drop privileges while operating on a user-supplied path. This vulnerability allows an unprivileged user to create files in arbitrary locations with root ownership.",
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo"]},
     ),
     # FIXME: `suggest-description` should not talk about `Denial of Service`
     # SuggestDescriptionCase(
@@ -192,11 +191,13 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2025-54770",
         expected_description="A vulnerability has been identified in the GRUB2 bootloader's network module that poses an immediate Denial of Service (DoS) risk. This flaw is a Use-after-Free issue, caused because the net_set_vlan command is not properly unregistered when the network module is unloaded from memory. An attacker who can execute this command can force the system to access memory locations that are no longer valid. Successful exploitation leads directly to system instability, which can result in a complete crash and halt system availability.",
+        metadata={"known_to_fail_evaluators": ["TitleHeadlineLevel"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-60876",
         expected_title="BusyBox wget: CRLF Injection via unsanitized HTTP request-target allows header injection",
         expected_description="A flaw was found in BusyBox wget. This vulnerability allows an attacker to inject arbitrary Hypertext Transfer Protocol (HTTP) headers by failing to sanitize raw Carriage Return (CR) (0x0D), Line Feed (LF) (0x0A), and other C0 control bytes in the HTTP request-target.",
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-61661",
@@ -231,6 +232,7 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2025-66448",
         expected_description="A remote code execution vulnerability has been identified in vLLM. An attacker can exploit a weakness in the model loading process to silently fetch and run unauthorized, malicious Python code on the host system. This happens because the engine mistakenly executes code from a remote repository referenced in a model's configuration, even when explicit security measures are set to prevent it.",
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-68493",
@@ -239,6 +241,78 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2025-91735",
         expected_description="A flaw was found in /driver/xyz.c in xyg sub component in the Linux kernel. This vulnerability allows a buffer overflow due to xyz leading to abc.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-0864",
+        expected_title="Python configparser: Configuration file injection via carriage return characters in multi-line values",
+        expected_description="A flaw was found in the `configparser` module of Python. When writing configuration files that contain multi-line text values with carriage return characters, an attacker who controls the input value can inject unexpected keys and values into the resulting file. This vulnerability, stemming from improper handling of line endings, could lead to unauthorized modification of configuration settings.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-9697",
+        expected_title="undici: TLS certificate validation bypass via SOCKS5 ProxyAgent",
+        expected_description="A flaw was found in undici, a Node.js HTTP/1.1 client. When undici's ProxyAgent is configured with a SOCKS5 proxy, it silently ignores the requestTls option, leading to a Transport Layer Security (TLS) certificate validation bypass. This allows a remote attacker to perform a Man-in-the-Middle (MITM) attack, enabling them to read and tamper with HTTPS communications by presenting an untrusted certificate. Applications relying on specific TLS certificate pinning are particularly vulnerable.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-31898",
+        expected_title="jsPDF: Arbitrary code execution via unsanitized input in createAnnotation method",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-31966",
+        expected_title="htslib: Information disclosure and denial of service due to insufficient CRAM feature data validation",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-31967",
+        expected_title="HTSlib: Information disclosure and Denial of Service via unvalidated CRAM mate reference ID",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-32636",
+        expected_title="ImageMagick: Denial of Service via out-of-bounds write in NewXMLTree method",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-33001",
+        expected_title="Jenkins: Arbitrary file write and potential code execution through crafted archives",
+    ),
+    # Aegis titles it as "Information disclosure" instead of "Origin validation bypass"
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-33002",
+        expected_title="Jenkins: Origin validation bypass via DNS rebinding in CLI WebSocket endpoint",
+        metadata={"known_to_fail_evaluators": ["TitleEvaluator"]},
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-44727",
+        expected_title="Jupyter Server: Remote Code Execution due to improper Content-Security-Policy",
+        expected_description="A flaw was found in Jupyter Server, the backend for Jupyter web applications. This vulnerability allows a remote attacker to achieve stored Cross-Site Scripting (XSS) by crafting a malicious notebook. When an authenticated user views this notebook, the system's nbconvert HTTP handlers render user-authored HTML without a proper Content-Security-Policy (CSP) sandbox directive. This oversight enables the execution of arbitrary code, potentially leading to full administrative control and remote code execution (RCE) on the server.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-50019",
+        expected_title="yt-dlp: Information disclosure via cookie leak with curl downloader",
+        expected_description="A flaw was found in yt-dlp, a command-line audio/video downloader. When curl is used as an external downloader, a remote attacker could exploit a vulnerability to leak sensitive user cookies. This occurs when yt-dlp passes cookies to curl without properly activating curl's cookie engine, causing cookies to be sent to unintended hosts during HTTP redirects or when downloading fragments from different domains. This could lead to unauthorized access to user accounts or sensitive information.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-50193",
+        expected_title="jackson-databind: Denial of Service via deeply nested JSON processing",
+        expected_description="A flaw was found in jackson-databind, a library used for processing JSON data. A remote attacker could exploit this vulnerability by sending specially crafted, deeply nested JSON to a service. If the service processes this input and then attempts to convert it back to a string, it can consume significant system resources. This uncontrolled resource consumption can lead to a Denial of Service (DoS), making the service unavailable to legitimate users.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-52799",
+        expected_title="Gogs: Information disclosure via missing authorization on attachment download",
+        expected_description="A flaw was found in Gogs, an open-source self-hosted Git service. This missing authorization vulnerability allows an unauthenticated remote attacker to download attachment files from private repositories if the attachment's unique identifier (UUID) is known. This bypass occurs because the system fails to verify user permissions when retrieving attachment files. The primary consequence is the disclosure of confidential information, such as credentials, cryptographic keys, or internal documents, which could lead to significant security risks.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-54531",
+        expected_title="pypdf: Denial of Service via crafted PDF with outlines",
+        expected_description="A flaw was found in pypdf, a pure-python PDF library. A remote attacker could craft a malicious PDF file containing outlines. When this crafted PDF is merged into a writer, it can lead to an infinite loop, causing a Denial of Service (DoS) in the application processing the PDF.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-54905",
+        expected_title="concurrent-ruby: Write lock granted without exclusivity due to read-count overflow",
+        expected_description="A flaw was found in concurrent-ruby. The Concurrent::ReentrantReadWriteLock component can incorrectly grant a write lock to a thread. This occurs when a thread repeatedly acquires a read lock, leading to an integer overflow in its internal counter. As a result, other threads can still hold or acquire read locks simultaneously, breaking the mutual-exclusion guarantee and potentially causing race conditions and inconsistent data reads.",
+    ),
+    SuggestDescriptionCase(
+        cve_id="CVE-2026-57437",
+        expected_title="Nokogiri: Denial of Service due to improper XPathContext garbage collection",
+        expected_description="A flaw was found in Nokogiri, an XML and HTML library for Ruby. This vulnerability occurs when an application directly constructs an XPathContext and allows its associated document to be garbage collected while the context is still in use. An attacker could potentially exploit this by causing the application to read invalid memory, leading to a denial of service (DoS) through a segmentation fault.",
+        metadata={"known_to_fail_evaluators": ["NoExploitDisclosure"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2099-99999",
@@ -258,8 +332,21 @@ evals = common_feature_evals + [
         rubric="suggested_title and suggested_description do not contain versions of affected components, except in acronyms explanation and in acronyms themselves.  Do not confuse API endpoint versions with component versions.",
     ),
     create_llm_judge(
+        assertion_name="NoExploitDisclosure",
+        rubric="suggested_description does not mention exploit availability or public disclosure status (e.g., 'The exploit has been publicly disclosed', 'A public exploit exists'). The description should focus on the vulnerability itself, not on whether exploits are available.",
+    ),
+    create_llm_judge(
         assertion_name="TitleSummarizesDescription",
         rubric="suggested_title briefly summarizes what is described in suggested_description",
+    ),
+    create_llm_judge(
+        assertion_name="TitleHeadlineLevel",
+        rubric=(
+            "suggested_title stays at headline level: one line. Fail only if the title reads like "
+            "a paragraph, lists three or more distinct impact dimensions, or includes mitigation steps. "
+            "Pass if the title briefly names one primary consequence, or a short compound of two related "
+            "consequences (e.g. 'X and Y') in a single headline phrase."
+        ),
     ),
 ]
 

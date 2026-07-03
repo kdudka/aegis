@@ -42,12 +42,11 @@ class SuggestStatementCase(Case):
         expected_output = SuggestStatementModel(
             cve_id=cve_id,
             title="",
-            impact="",
-            components=[],
             description="",
             explanation="",
             suggested_statement=expected_statement,
             suggested_mitigation=expected_mitigation,
+            data_quality=1.0,
             confidence=1.0,
             tools_used=[],
             disclaimer=disclaimer,
@@ -92,6 +91,7 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2022-50087",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux 8 and 9. A use-after-free flaw in the `arm_scpi` firmware component of the Linux kernel could allow a local attacker to escalate privileges. ",
+        metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2022-50390",
@@ -146,24 +146,44 @@ cases = [
         KCS[1] document for verifying the fix in RHCOS.
 
         [1] https://access.redhat.com/solutions/7071748""",
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationWellFormedCommands",
+                "MitigationEvaluator",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2023-53176",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux. A privileged local attacker (ex. with `CAP_SYS_ADMIN` privileges) could cause a denial of service by unbinding a serial port hardware-specific 8250 driver, leading to a kernel oops.",
+        metadata={"known_to_fail_evaluators": ["StatementNoCodeLevelDetails"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2023-53188",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux. A race condition in the Open vSwitch kernel module can lead to a denial of service, causing a CPU to become stuck in an infinite loop. Exploitation requires a specific setup involving Open vSwitch, veth pairs, and concurrent deletion of network namespaces while traffic is active; these actions require elevated privileges such as `CAP_NET_ADMIN`. Attack complexity is similarly high, since triggering this vulnerability requires a specific timing window, sustained parallel traffic, and a namespace teardown. The only meaningful impact from successfully causing the vulnerability is to availability. No data leakage, memory disclosure, or information exposure is involved, and there is no evidence of memory corruption. ",
+        metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2023-53205",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux on the s390x architecture. The flaw is a race condition in the KVM s390/diag handler that could lead to out-of-bounds access. Triggering this vulnerability requires precise timing and repeated invocations and will most likely result in a denial-of-service. Confidentiality is not impacted as the bug does not directly expose guest or host memory contents. Availability is also highly unlikely to be impacted, though out-of-bounds access could in theory corrupt the kernel or KVM internal state. ",
-        metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2023-53333",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux. The flaw is a stack-out-of-bounds read in the netfilter DCCP connection tracking module. Exploitation requires an attacker to send specially crafted DCCP packets to a system with the `nf_conntrack_dccp` module loaded. The vulnerability's impact is primarily on availability, since a malformed packet can lead to a warning or panic, though it can also pose a potential (though unlikely) risk to confidentiality, since kernel stack values could be exposed indirectly through side channels or other error-dependent behaviors. ",
-        metadata={"known_to_fail_evaluators": ["StatementEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",
+                # Aegis mentions function name nf_conntrack_dccp_packet
+                "StatementNoCodeLevelDetails",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2023-54108",
@@ -186,6 +206,7 @@ cases = [
             To mitigate this vulnerability, consider removing these packages. Note that some of these packages are required by GNOME, removing them will also remove GNOME and other packages, breaking functionality. However, the server can still be used via the terminal interface.
             Additionally, WebKitGTK3 is not required by any package. Therefore, it can be removed without consequences or break of functionality.
             """,
+        metadata={"known_to_fail_evaluators": ["MitigationWellFormedCommands"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2024-53197",
@@ -200,7 +221,12 @@ cases = [
             If you need further assistance, see KCS article https://access.redhat.com/solutions/41278 or contact Red Hat Global Support Services.
             """,
         metadata={
-            "known_to_fail_evaluators": ["MitigationEvaluator", "StatementEvaluator"]
+            "known_to_fail_evaluators": [
+                "MitigationEvaluator",
+                # Aegis recommends mkinitcpio -P for Fedora but Fedora uses dracut
+                "MitigationWellFormedCommands",
+                "StatementEvaluator",
+            ]
         },
     ),
     SuggestStatementCase(
@@ -222,6 +248,7 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-9222",
         expected_statement="...rated Important.",
+        metadata={"known_to_fail_evaluators": ["StatementSeverityRationale"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-12816",
@@ -231,14 +258,32 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-13327",
         expected_statement="This vulnerability is rated Moderate for Red Hat products. It allows arbitrary code execution through specially crafted ZIP archives when using the `uv` tool to install attacker-controlled Python packages. Exploitation requires user interaction to initiate the package installation. This affects components within Red Hat AI Inference Server and Red Hat OpenShift AI.",
-        metadata={"known_to_fail_evaluators": ["MitigationWellFormedCommands"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationWellFormedCommands",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-15284",
         expected_statement="This vulnerability is rated Important for Red Hat products that utilize the `qs` module for parsing query strings, particularly when processing user-controlled input with bracket notation. The `arrayLimit` option, intended to prevent resource exhaustion, is bypassed when bracket notation (`a[]=value`) is used, allowing a remote attacker to cause a denial of service through memory exhaustion. This can lead to application crashes or unresponsiveness, making the service unavailable.",
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementNoCodeLevelDetails",
+                "StatementEvaluator",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-22097",
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",  # FIXME: Aegis should explain why Red Hat assessed IMPORTANT when GHSA-6rw7-vpxm-498p assessed LOW
+                "StatementNoDuplicatedInfo",
+                "StatementNoCodeLevelDetails",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-23395",
@@ -267,7 +312,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-38512",
         expected_statement="This vulnerability in the Linux kernel's Wi-Fi component allows an adjacent attacker to perform A-MSDU spoofing attacks in mesh networks, leading to a high integrity impact. Confidentiality could potentially be impacted, if there is exposure of network\u2011internal traffic or services via the spoofed Ethernet frames. Similarly, availability may be impacted if the spoofed packets cause problems like traffic disruption or routing instabilities.",
-        metadata={"known_to_fail_evaluators": ["StatementEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-39791",
@@ -282,6 +332,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-39795",
         expected_statement="This vulnerability is rated Low for Red Hat Enterprise Linux because a possible integer overflow in the `blk_stack_limits()` function within the kernel's block layer could be exploited by an attacker with high privileges. Successful exploitation may lead to a denial of service or information disclosure. Triggering this vulnerability requires elevated privileges (ex. `CAP_SYS_ADMIN`) as modifying or creating block stacks is a privileged operation. If the bug is triggered, then there are potentially impacts to integrity and availability, in that a misalignment could result in an incorrect write to storage which in turn could cause some I/O errors, though they are unlikely to hang the system outright.",
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementNoCodeLevelDetails",
+                "StatementEvaluator",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-39809",
@@ -301,10 +357,23 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-39816",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux 10.x. The flaw exists in the io_uring/kbuf component of the kernel, where improper handling of ring provided buffer lengths from userspace could lead to an issue. Red Hat Enterprise Linux 6, 7, 8, and 9 are not affected as the vulnerable code is not present in these versions. If triggered, this vulnerability affects integrity and availability, as the bug can cause inconsistent internal states and lead to stalls or system instability in the io_uring subsystem.",
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementNoCodeLevelDetails",
+                "StatementSeverityRationale",
+                "StatementEvaluator",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-39822",
         expected_statement="This vulnerability is rated Moderate for Red Hat Enterprise Linux 10 as it could lead to a local privilege escalation due to a signedness error in the io_uring subsystem. Red Hat Enterprise Linux 6, 7, 8, and 9 are not affected as the vulnerable code is not present in these versions. If triggered, this vulnerability can lead to integrity and availability issues, as an improperly computed `this_len` could lead to memory corruption, data truncation, or incorrect writes, which in turn could increase the likelihood of a crash. ",
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-39832",
@@ -315,6 +384,12 @@ cases = [
         cve_id="CVE-2025-43529",
         expected_statement="This vulnerability is rated IMPORTANT for Red Hat products. A use-after-free flaw in webkitgtk, when processing maliciously crafted web content, can lead to remote code execution. Successful exploitation requires user interaction, where a victim must visit a malicious website.",
         expected_mitigation="To mitigate this issue, avoid processing untrusted web content. Additionally, disabling the JavaScript JIT compiler can reduce the attack surface. For applications using WebKitGTK, set the environment variable `JavaScriptCoreUseJIT=0` before launching the application. This may impact performance for JavaScript-heavy web content.",
+        metadata={"known_to_fail_evaluators": ["MitigationWellFormedCommands"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2025-53020",
+        expected_mitigation="The attack surface can be reduced by disabling HTTP/2 support in Apache.\nFollow the guidance in Red Hat KCS article to:\n- Remove h2 and h2c from the Protocols directive\n- Disable mod_http2 and mod_proxy_http2 modules (if not required)\n\nhttps://access.redhat.com/node/7056356",
+        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-64503",
@@ -345,6 +420,7 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-68469",
         expected_mitigation="To mitigate this issue, avoid processing untrusted TIFF files with ImageMagick. In environments where ImageMagick processes files automatically, ensure that all input files originate from trusted sources or implement strict input validation to prevent the processing of malicious TIFF files.",
+        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-69262",
@@ -357,9 +433,83 @@ cases = [
         },
     ),
     SuggestStatementCase(
+        cve_id="CVE-2026-3497",
+        expected_mitigation="To mitigate this issue, disable GSSAPI key exchange in the OpenSSH server configuration. This prevents the server from processing GSSAPI messages, eliminating the vulnerability's attack surface.\n\nEdit `/etc/ssh/sshd_config` and add or modify the line:\n```\nGSSAPIKeyExchange no\n```\n\nAfter saving the changes, restart the `sshd` service for the mitigation to take effect. This action will prevent users from authenticating via GSSAPI.\n\n```\n# systemctl restart sshd\n```",
+        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-4271",
+        expected_mitigation="Mitigation for this issue is either not available or the currently available options don't meet the Red Hat Product Security criteria comprising ease of use and deployment, applicability to widespread installation base or stability.",
+        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-5483",
+        expected_statement="A flaw in the `odh-dashboard` component of Red Hat OpenShift AI allows for the disclosure of Kubernetes Service Account tokens through a NodeJS endpoint. This vulnerability could enable an attacker to gain unauthorized access to Kubernetes resources within the OpenShift AI environment.",
+        expected_mitigation="If applying the update is not immediately possible, the vulnerability can be mitigated by disabling or removing the NIM (NVIDIA Inference Microservice) integration from the Red Hat OpenShift AI (RHOAI) environment.",
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
+    ),
+    SuggestStatementCase(
         cve_id="CVE-2026-22822",
         expected_mitigation="To mitigate this issue, implement a policy engine such as Kubernetes, Kyverno, Kubewarden, or OPA. Configure the policy engine to prevent the usage of the `getSecretKey` function within any ExternalSecret resource. This will block the insecure cross-namespace secret retrieval capability.",
         metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-24450",
+        expected_statement="This flaw in the LibRaw library consists in an integer overflow in the `uncompressed_fp_dng_load_raw` function, a successfully performed attack may lead to a heap buffer overflow and potentially arbitrary code execution or denial of service. The vulnerability stems from the usage of a 32-bit arithmetic to calculate the pixel buffers when decoding the raw image file, which may end up overflowing when processing user controlled images as input.\n\nThis vulnerability is not exploitable when the application consuming LibRaw is using the default memory limit (`max_raw_memory_mb` parameter) to unpack the RAW image. To be considered vulnerable the application should be setting the limit to around or greater then 16GB.\n\nRed Hat Product Security has rated this vulnerability as having a Moderate impact, despite the possibility of arbitrary code execution due to the heap-based buffer overflow, as the user needs to be tricked to process a maliciously crafted image or LibRaw needs to be exposed to the network and accept untrusted data as input. Additionally the default `max_raw_memory_mb` value set with LibRaw is not enough to trigger the vulnerability.",
+        metadata={"known_to_fail_evaluators": ["StatementNoCodeLevelDetails"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-27820",
+        expected_statement="A buffer overflow vulnerability exists in the Zlib::GzipReader component of the Ruby zlib interface. This flaw, caused by insufficient memory capacity during data manipulation, could lead to memory corruption and system instability. This vulnerability is considered of a Moderate severity this happens because the high complexity to exploit, additionally the attacker may have not full control over the data is being corrupted or exfiltrated.",
+        metadata={
+            "known_to_fail_evaluators": [
+                # Aegis mentions function name zstream_buffer_ungets in the statement
+                "StatementNoCodeLevelDetails",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-27962",
+        expected_statement="This critical vulnerability in Authlib's JWS implementation allows unauthenticated attackers to forge JWTs by embedding their own cryptographic key in the token header. Impact is high to confidentiality and integrity as attackers can bypass authentication.\n\nRed Hat Quay is not affected, as it imports authlib solely as a JWK parsing utility and performs all JWT signature verification through PyJWT, so the vulnerable jws.deserialize_compact() code path is never called.\n\nRed Hat OpenShift AI is not affected, since authlib is only present as a transitive dependency in the dev dependency group and is not included in production image builds, so the vulnerable code is not present in the shipped product.\n\nRed Hat Satellite is not affected, as authlib is only present as a dependency of fastmcp. In Satellite, fastmcp only invokes authlib using jwt.decode() which isn't able to reach the vulnerability condition even with key=none.",
+        metadata={"known_to_fail_evaluators": ["StatementNoCodeLevelDetails"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-31402",
+        expected_statement="This Important flaw in the Linux kernel's NFSv4.0 server (nfsd) allows a heap overflow. In this flaw a local attacker can trigger this by orchestrating two NFSv4.0 clients to create a conflicting lock with an oversized owner string.",
+        metadata={"known_to_fail_evaluators": ["StatementEvaluator"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-35091",
+        expected_statement="This vulnerability has a Moderate impact on Red Hat products. A flaw in Corosync's membership commit token sanity check, when running in the default totemudp/totemudpu mode, allows a remote unauthenticated attacker to send a crafted UDP packet. This can lead to an out-of-bounds read, resulting in a denial of service and potential limited memory content disclosure. This issue affects Corosync only when configured to use the legacy totemudp or totemudpu transport modes with unencrypted communication.\n\nThese modes are not the default in modern Corosync versions. The default transport is knet, which supports encryption and is the standard configuration in RHEL.",
+        metadata={"known_to_fail_evaluators": ["StatementEvaluator"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-40175",
+        expected_statement='Critical impact: The Axios library, a promise-based HTTP client, is susceptible to a prototype pollution vulnerability. This flaw, when combined with specific "Gadget" attack chains in third-party dependencies, can lead to remote code execution.',
+        metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
+    ),
+    SuggestStatementCase(
+        cve_id="CVE-2026-40227",
+        expected_mitigation="This issue can be mitigated by changing the permission of the varsock file located at:\n~~~\n/run/systemd/io.systemd.Manager\n~~~\nto be accessible only by trusted or privileged users.",
+        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+    ),
+    # Analyst feedback (AEGIS-368): GHSA reference provides detailed impact insights
+    # that should enrich the statement beyond restating comment_zero.
+    SuggestStatementCase(
+        cve_id="CVE-2026-40938",
+        expected_statement=(
+            "This Important flaw in Tekton Pipelines allows an authenticated user to "
+            "achieve arbitrary code execution on the resolver pod by injecting malicious "
+            "commands into the git resolver's revision parameter. A successful exploitation "
+            "of the flaw can lead to the exfiltration of all cluster-wide secrets, posing a "
+            "significant risk to the integrity and confidentiality of the OpenShift environment."
+        ),
     ),
 ]
 
@@ -376,6 +526,25 @@ evals = common_feature_evals + [
     create_llm_judge(
         assertion_name="StatementNoDuplicatedInfo",
         rubric="A non empty suggested_statement field should not duplicate verbatim the CVE description. It is acceptable to provide some description when used to explain impact.",
+    ),
+    create_llm_judge(
+        assertion_name="StatementSeverityRationale",
+        rubric=(
+            "If suggested_statement is empty, pass. If it is non-empty and does NOT include an explicit "
+            "severity label (Low/Moderate/Important/Critical), pass—qualitative impact-only statements are allowed. "
+            "If it includes a severity label, it should briefly explain why that label fits (e.g. preconditions, defaults, "
+            "blast radius, or why Red Hat is unaffected while the flaw is still rated upstream). "
+            "Pass if justification is weak but present; fail only when a label is stated with no supporting rationale at all."
+        ),
+    ),
+    create_llm_judge(
+        assertion_name="StatementNoAffectsManifest",
+        rubric=(
+            "Fail only if suggested_statement is essentially a full advisory Affects matrix (many products with many "
+            "version ranges in list form). Pass for one short clause naming affected or unaffected Red Hat major releases "
+            "(e.g. RHEL 9 and 10) when needed for applicability, for a single component version range when scoping the flaw, "
+            "or for brief default/precondition notes. Gold-standard statements may legitimately mention releases this way."
+        ),
     ),
     create_llm_judge(
         assertion_name="MitigationWellFormedCommands",

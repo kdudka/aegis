@@ -22,7 +22,7 @@ from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.cve import SuggestAffectedComponents
 from aegis_ai.features.cve.data_models import SuggestAffectedComponentsModel
-from aegis_ai.toolsets.tools.osidb import CVE, _strip_component_prefix_from_title
+from aegis_ai.toolsets.tools.osidb import CVE
 
 from evals.features.common import (
     FeatureMetricsEvaluator,
@@ -43,6 +43,11 @@ SAMPLE_SEED = int(
 # Excludes CVEs with cpython as expected (model tends to suggest 'python' instead).
 # Excludes CVE-2025-23083 (nodejs): model often returns 'Node.js', causing flaky evals.
 DEFAULT_CVE_IDS: tuple[str, ...] = (
+    "CVE-2006-10002",
+    "CVE-2025-3416",
+    "CVE-2025-42611",
+    "CVE-2025-5991",
+    "CVE-2025-6052",
     "CVE-2025-11233",
     "CVE-2025-12863",
     "CVE-2025-13699",
@@ -50,7 +55,6 @@ DEFAULT_CVE_IDS: tuple[str, ...] = (
     "CVE-2025-22866",
     "CVE-2025-22868",
     "CVE-2025-23050",
-    "CVE-2025-3416",
     "CVE-2025-47911",
     "CVE-2025-47912",
     "CVE-2025-52881",
@@ -58,30 +62,152 @@ DEFAULT_CVE_IDS: tuple[str, ...] = (
     "CVE-2025-58183",
     "CVE-2025-58188",
     "CVE-2025-58190",
-    "CVE-2025-5991",
-    "CVE-2025-6052",
     "CVE-2025-61726",
     "CVE-2025-61727",
     "CVE-2025-62518",
+    "CVE-2025-62718",
     "CVE-2025-64329",
     "CVE-2025-65637",
+    "CVE-2025-66442",
+    "CVE-2026-0396",
+    "CVE-2026-0900",
     "CVE-2026-0988",
     "CVE-2026-0989",
     "CVE-2026-0990",
     "CVE-2026-0992",
     "CVE-2026-1484",
     "CVE-2026-1485",
+    "CVE-2026-1502",
     "CVE-2026-1757",
+    "CVE-2026-2319",
+    "CVE-2026-2320",
+    "CVE-2026-3920",
+    "CVE-2026-3925",
+    "CVE-2026-3937",
+    "CVE-2026-4447",
+    "CVE-2026-4449",
+    "CVE-2026-4452",
+    "CVE-2026-4455",
+    "CVE-2026-5290",
+    "CVE-2026-5291",
+    "CVE-2026-5868",
+    "CVE-2026-5887",
+    "CVE-2026-5889",
+    "CVE-2026-5900",
+    "CVE-2026-5918",
+    "CVE-2026-6298",
+    "CVE-2026-6316",
+    "CVE-2026-7335",
+    "CVE-2026-7347",
+    "CVE-2026-21998",
+    "CVE-2026-22004",
+    "CVE-2026-22815",
+    "CVE-2026-22822",
+    "CVE-2026-23272",
+    "CVE-2026-23275",
+    "CVE-2026-23555",
+    "CVE-2026-23666",
     "CVE-2026-23950",
+    "CVE-2026-24128",
+    "CVE-2026-24400",
     "CVE-2026-24842",
+    "CVE-2026-25243",
+    "CVE-2026-25526",
+    "CVE-2026-25534",
+    "CVE-2026-26010",
+    "CVE-2026-26962",
+    "CVE-2026-27140",
+    "CVE-2026-27447",
+    "CVE-2026-27478",
+    "CVE-2026-27693",
+    "CVE-2026-27727",
+    "CVE-2026-27820",
+    "CVE-2026-27830",
+    "CVE-2026-27962",
+    "CVE-2026-28208",
+    "CVE-2026-28338",
+    "CVE-2026-28500",
+    "CVE-2026-28684",
+    "CVE-2026-28925",
+    "CVE-2026-29063",
+    "CVE-2026-31898",
+    "CVE-2026-32178",
+    "CVE-2026-32285",
+    "CVE-2026-32289",
+    "CVE-2026-32748",
+    "CVE-2026-32935",
+    "CVE-2026-33056",
+    "CVE-2026-33256",
+    "CVE-2026-33414",
+    "CVE-2026-33416",
+    "CVE-2026-33891",
+    "CVE-2026-33993",
+    "CVE-2026-34073",
+    "CVE-2026-34444",
+    "CVE-2026-34785",
+    "CVE-2026-35339",
+    "CVE-2026-35342",
+    "CVE-2026-35537",
+    "CVE-2026-39946",
+    "CVE-2026-40175",
+    "CVE-2026-40193",
+    "CVE-2026-40200",
+    "CVE-2026-40575",
+    "CVE-2026-40611",
+    "CVE-2026-40938",
+    "CVE-2026-41843",
 )
 
 
 # count the corresponding evaluation cases in overall score but do not trigger
 # assertion failures if the individual score is low
 KNOWN_TO_FAIL_CVE_IDS: tuple[str, ...] = (
-    "CVE-2025-64329",  # Aegis occasionally suggests 'containerd' while 'github.com/containerd/containerd' is expected
+    "CVE-2026-23555",  # got ['xenstored'], expected ['Xen']
+    "CVE-2026-25526",  # got ['com.hubspot/jinjava'], expected ['com.hubspot.jinjava/jinjava']
+    "CVE-2026-25534",  # got ['io.spinnaker/clouddriver-artifacts', 'io.spinnaker/orca-core'], expected ['io.spinnaker.clouddriver/clouddriver-artifacts', 'io.spinnaker.orca/orca-core']
 )
+
+
+# Expected ecosystems for CVEs where ground-truth is known.
+# Allowed values: cargo, golang, npm, pypi, maven, gem, upstream, unknown.
+EXPECTED_ECOSYSTEMS: dict[str, list[str]] = {
+    "CVE-2026-22815": ["pypi"],
+    "CVE-2026-22822": ["golang"],
+    "CVE-2026-24128": ["maven"],
+    "CVE-2026-24400": ["maven"],
+    "CVE-2026-24842": ["npm"],
+    "CVE-2026-25243": ["upstream"],
+    "CVE-2026-25526": ["maven"],
+    "CVE-2026-25534": ["maven"],
+    "CVE-2026-26010": ["maven"],
+    "CVE-2026-26962": ["gem"],
+    "CVE-2026-27478": ["maven"],
+    "CVE-2026-27693": ["maven"],
+    "CVE-2026-27727": ["maven"],
+    "CVE-2026-27820": ["gem"],
+    "CVE-2026-27830": ["maven"],
+    "CVE-2026-27962": ["pypi"],
+    "CVE-2026-28208": ["maven"],
+    "CVE-2026-28338": ["maven"],
+    "CVE-2026-28500": ["pypi"],
+    "CVE-2026-28684": ["pypi"],
+    "CVE-2026-29063": ["npm"],
+    "CVE-2026-31898": ["npm"],
+    "CVE-2026-33056": ["cargo"],
+    "CVE-2026-33414": ["golang"],
+    "CVE-2026-33891": ["npm"],
+    "CVE-2026-33993": ["npm"],
+    "CVE-2026-34073": ["pypi"],
+    "CVE-2026-34444": ["pypi"],
+    "CVE-2026-34785": ["gem"],
+    "CVE-2026-39946": ["golang"],
+    "CVE-2026-40175": ["npm"],
+    "CVE-2026-40193": ["golang"],
+    "CVE-2026-40575": ["golang"],
+    "CVE-2026-40611": ["golang"],
+    "CVE-2026-40938": ["golang"],
+    "CVE-2026-41843": ["maven"],
+}
 
 
 def _description_from_cve(cve: CVE) -> str:
@@ -150,14 +276,20 @@ def _build_cases(
         expected_components = _components_list(cve)
         metadata: dict[str, Any] = {"cve_id": cve_id}
         if cve_id in KNOWN_TO_FAIL_CVE_IDS:
-            # annotate known-to-fail evaluation cases
             metadata["known_to_fail_evaluators"] = ["ComponentsOverlapEvaluator"]
+        if cve_id in EXPECTED_ECOSYSTEMS:
+            metadata["expected_ecosystems"] = EXPECTED_ECOSYSTEMS[cve_id]
+
+        case_evaluators = tuple(
+            field_evaluators[f] for f in field_evaluators if f in metadata
+        )
 
         case = SuggestAffectedComponentsCase(
             name=f"suggest-affected-components-{cve_id}",
             inputs=cve_id,
             expected_output=expected_components,
             metadata=metadata,
+            evaluators=case_evaluators,
         )
         cases.append(case)
 
@@ -220,8 +352,9 @@ class ComponentsOverlapEvaluator(Evaluator[str, SuggestAffectedComponentsModel])
         union = len(exp_set | got_set)
         jaccard = inter / union if union else 0.0
 
+        precision = inter / len(got_set) if got_set else 0.0
         primary_bonus = (
-            1.0
+            precision
             if (expected and exp_set and expected[0].lower().strip() in got_set)
             else 0.0
         )
@@ -232,39 +365,34 @@ class ComponentsOverlapEvaluator(Evaluator[str, SuggestAffectedComponentsModel])
         return EvaluationReason(value=score, reason=reason)
 
 
-class TestStripComponentPrefixFromTitle:
-    """Unit tests for _strip_component_prefix_from_title helper."""
+class EcosystemEvaluator(Evaluator[str, SuggestAffectedComponentsModel]):
+    """Scores ecosystem prediction against expected_ecosystems in metadata."""
 
-    def test_strips_simple_component_prefix(self) -> None:
-        """Title starting with 'Component: ' should strip to rest."""
-        assert (
-            _strip_component_prefix_from_title("kernel: buffer overflow")
-            == "buffer overflow"
-        )
+    def evaluate(
+        self, ctx: EvaluatorContext[str, SuggestAffectedComponentsModel]
+    ) -> EvaluationReason:
+        expected = (ctx.metadata or {}).get("expected_ecosystems", [])
+        assert expected, "EcosystemEvaluator requires expected_ecosystems in metadata"
 
-    def test_does_not_strip_mid_sentence_colon(self) -> None:
-        """Colon mid-sentence (e.g. 'Audio/Video: Playback') should not strip."""
-        assert (
-            _strip_component_prefix_from_title(
-                "Use-after-free in the Audio/Video: Playback"
-            )
-            is None
-        )
+        got = getattr(ctx.output, "ecosystems", None) or []
+        exp_set = {e.lower().strip() for e in expected}
+        got_set = {e.lower().strip() for e in got}
 
-    def test_does_not_strip_dom_window_style(self) -> None:
-        """'DOM: Window' style (colon after slash) - pattern not at start."""
-        assert (
-            _strip_component_prefix_from_title(
-                "Use-after-free in the DOM: Window component"
-            )
-            is None
-        )
+        if exp_set == got_set:
+            return EvaluationReason(value=reflect_confidence(ctx, 1.0), reason=None)
 
-    def test_empty_title_returns_none(self) -> None:
-        assert _strip_component_prefix_from_title("") is None
+        inter = len(exp_set & got_set)
+        union = len(exp_set | got_set)
+        score = inter / union if union else 0.0
+        reason = f"ecosystems: got {got}, expected {expected}"
+        score = reflect_confidence(ctx, score)
+        return EvaluationReason(value=score, reason=reason)
 
-    def test_no_colon_returns_none(self) -> None:
-        assert _strip_component_prefix_from_title("No colon here") is None
+
+# evaluators only attached to cases that provide the corresponding expected data
+field_evaluators = {
+    "expected_ecosystems": EcosystemEvaluator(),
+}
 
 
 async def suggest_affected_components(cve_id: CVEID) -> SuggestAffectedComponentsModel:
@@ -324,7 +452,9 @@ async def test_eval_suggest_affected_components(suggest_affected_components_case
     for ecase in report.cases:
         expected = ecase.expected_output or []
         suggested = getattr(ecase.output, "components", None) or []
-        for result in ecase.scores.values():
+        for eval_name, result in ecase.scores.items():
+            if eval_name != "ComponentsOverlapEvaluator":
+                continue
             if (
                 result.reason
                 and "got " in result.reason

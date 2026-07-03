@@ -18,10 +18,10 @@ run-otel:
 # dev
 ############################################################################
 lint:
-	uvx ruff check
+	uv run ruff check
 
 format:
-	uvx ruff format
+	uv run ruff format
 
 check-type: fetch-deps
 	uvx ty check --exclude src/aegis_ai_ml
@@ -31,15 +31,29 @@ check: format lint check-type
 clean:
 	uv clean
 
-eval:
+generate-kernel-eval:
+	uv run python evals/features/cve/generate_kernel_eval_csv.py
+
+refresh-kernel-osidb-cache:
+	uv run python evals/features/cve/generate_kernel_eval_csv.py --refresh-cache
+
+# populate-kernel-caches reads CVE IDs from eval-kernel-cves.csv (output of
+# generate-kernel-eval).  Run prepare-kernel-eval instead of calling this
+# target directly to ensure the CSV is generated first.
+populate-kernel-caches:
+	uv run python evals/utils/populate_kernel_cve_cache.py --from-eval-csv
+
+prepare-kernel-eval: generate-kernel-eval populate-kernel-caches
+
+eval: fetch-deps
 	uv run pytest -vv -s --show-capture=no evals
 
 # The eval-debug target enforces single-job concurrency for debugging purposes
 # by setting AEGIS_LLM_MAX_JOBS=1. This ensures only one job runs at a time.
-eval-debug:
+eval-debug: fetch-deps
 	AEGIS_LLM_MAX_JOBS=1 uv run pytest -vv -s -o log_cli_level=DEBUG --show-capture=no evals
 
-eval-in-parallel:
+eval-in-parallel: fetch-deps
 	uv run pytest -vv -n auto evals
 
 test:
@@ -49,7 +63,7 @@ test-web:
 	uv run pytest src/aegis_ai_web/tests
 
 fetch-deps:
-	uv sync --frozen
+	uv sync --frozen --extra=classifier_deps
 
 upgrade-deps:
 	uv sync --upgrade
@@ -62,6 +76,18 @@ build-dist:
 
 publish-dist:
 	uv run $(PYTHON) -m twine upload dist/*
+
+
+############################################################################
+# kernel classifier
+############################################################################
+KERNEL_CLF_DIR = src/aegis_ai_ml/src/classifier/kernel-cve-impact-classifier
+
+retrain-kernel:
+	$(MAKE) -C $(KERNEL_CLF_DIR) retrain $(if $(RETUNE),RETUNE=1)
+
+test-kernel:
+	$(MAKE) -C $(KERNEL_CLF_DIR) test
 
 
 ############################################################################

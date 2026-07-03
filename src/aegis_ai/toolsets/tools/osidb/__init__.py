@@ -12,9 +12,14 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from aegis_ai import get_env_flag
 from aegis_ai.data_models import CVEID, cveid_validator
+from aegis_ai.kernel_classifier import is_kernel_component
 from aegis_ai.features.data_models import feature_deps
 from aegis_ai.toolsets.tools import BaseToolOutput, BaseToolInput
-from aegis_ai.toolsets.tools.osidb.osidb_client import OSIDBClient
+from aegis_ai.toolsets.tools.osidb.osidb_client import (
+    OSIDBClient,
+    OSIDBFlawNotFoundError,
+    OSIDBUnauthorizedError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +150,9 @@ def cve_exclude_fields(
 
     # create a local copy so that we can change the CVE object
     cve = cve.model_copy()
-    if "rh_cvss_score" in fields_to_exclude:
+    if "all_cvss_scores" in fields_to_exclude:
+        cve.cvss_scores = []
+    elif "rh_cvss_score" in fields_to_exclude:
         # exclude RH-provided CVSS
         cve.cvss_scores = [cvss for cvss in cve.cvss_scores if cvss["issuer"] != "RH"]
 
@@ -233,6 +240,10 @@ async def cve_retrieve(cve_id: CVEID) -> CVE:
             affects=affects,
             cvss_scores=cvss_scores,
         )
+    except OSIDBFlawNotFoundError:
+        raise
+    except OSIDBUnauthorizedError:
+        raise
     except Exception as e:
         logger.error(
             f"We encountered an error during OSIDB retrieval of {validated_cve_id}: {e}"
@@ -262,12 +273,17 @@ async def flaw_tool(ctx: RunContext[feature_deps], input: OSIDBToolInput) -> CVE
     else:
         cve = await cve_retrieve(input.cve_id)
 
+    if is_kernel_component(cve.components):
+        ctx.deps.is_kernel_cve = True
+
     # exclude CVE fields according to feature_deps
     return cve_exclude_fields(cve, ctx.deps.exclude_osidb_fields)
 
 
 @Tool
-async def component_count_tool(ctx: RunContext, component_name: str) -> Any:
+async def component_count_tool(
+    ctx: RunContext[feature_deps], component_name: str
+) -> Any:
     """
     Searches OSIDB by component_name returning count of CVE flaws related to given component.
 
@@ -288,7 +304,9 @@ _COMPONENT_FLAW_LIMIT = 100
 
 @Tool
 async def component_flaw_tool(
-    ctx: RunContext, component_name: str, limit: int = _COMPONENT_FLAW_LIMIT
+    ctx: RunContext[feature_deps],
+    component_name: str,
+    limit: int = _COMPONENT_FLAW_LIMIT,
 ) -> Any:
     """
     Searches OSIDB by component_name returning CVE flaws related to given component.
@@ -310,7 +328,7 @@ async def component_flaw_tool(
     return flaws
 
 
-toolset = FunctionToolset(
+toolset: FunctionToolset[feature_deps] = FunctionToolset(
     tools=[flaw_tool, component_count_tool, component_flaw_tool],
 )
 

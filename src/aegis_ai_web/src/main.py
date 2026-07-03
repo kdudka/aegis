@@ -14,6 +14,8 @@ from typing import Dict, Optional, Type, Annotated, cast, Any
 
 import yaml
 from fastapi import FastAPI, Request, HTTPException, Form, Query
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -23,9 +25,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from aegis_ai import config_logging, get_settings
-from aegis_ai.agents import public_feature_agent, rh_feature_agent
+from aegis_ai.agents import (
+    public_feature_agent,
+    rh_feature_agent,
+)
 
 from aegis_ai.data_models import CVEID, cveid_validator
+from aegis_ai.toolsets.tools.osidb.osidb_client import (
+    OSIDBAuthError,
+    OSIDBFlawNotFoundError,
+    OSIDBUnauthorizedError,
+)
 from aegis_ai.features import cve, component
 from aegis_ai.features.data_models import AegisAnswer
 
@@ -68,6 +78,44 @@ app: FastAPI = FastAPI(
 )
 
 
+def _enrich_openapi_schema() -> None:
+    """Add security scheme, default responses, and 429 to the generated OpenAPI spec."""
+    schema = app.openapi()
+    schema["security"] = [{"ApiKeyAuth": []}]
+    schema.setdefault("components", {})["securitySchemes"] = {
+        "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+    }
+    error_schema = {
+        "type": "object",
+        "properties": {"detail": {"type": "string", "title": "Detail"}},
+        "required": ["detail"],
+        "title": "ErrorResponse",
+    }
+    schema["components"].setdefault("schemas", {})["ErrorResponse"] = error_schema
+    error_ref = {
+        "description": "Unexpected error",
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+            }
+        },
+    }
+    rate_limit_ref = {
+        "description": "Too Many Requests",
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/ErrorResponse"}
+            }
+        },
+    }
+    for path_data in schema.get("paths", {}).values():
+        for operation in path_data.values():
+            if isinstance(operation, dict) and "responses" in operation:
+                operation["responses"].setdefault("429", rate_limit_ref)
+                operation["responses"].setdefault("default", error_ref)
+    app.openapi_schema = schema
+
+
 @app.exception_handler(json.JSONDecodeError)
 async def json_decode_exception_handler(request: Request, exc: json.JSONDecodeError):
     """Handle JSON decode errors from invalid request bodies."""
@@ -89,6 +137,37 @@ async def unicode_decode_exception_handler(request: Request, exc: UnicodeDecodeE
     return JSONResponse(
         status_code=400,
         content={"detail": "Invalid UTF-8 encoding in request body"},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+):
+    """
+    Log Pydantic/request validation failures and return the standard FastAPI 422 body.
+
+    WARNING logs include error type, location, and message only. Request payload
+    excerpts (Pydantic's ``input`` field) are logged at DEBUG only.
+    """
+    errors = jsonable_encoder(exc.errors())
+    summary_errors = [{k: v for k, v in err.items() if k != "input"} for err in errors]
+    logging.warning(
+        "Request validation failed: %s %s — %s",
+        request.method,
+        request.url.path,
+        json.dumps(summary_errors),
+    )
+    logging.debug(
+        "Request validation failed (full detail, includes body excerpts): %s %s — %s",
+        request.method,
+        request.url.path,
+        json.dumps(errors),
+    )
+    return JSONResponse(
+        status_code=422,
+        content={"detail": errors},
+        media_type="application/json",
     )
 
 
@@ -234,9 +313,10 @@ cve_feature_registry: Dict[str, Type] = {
     "suggest-affected-components": cve.SuggestAffectedComponents,
     "identify-pii": cve.IdentifyPII,
     "cvss-diff-explainer": cve.CVSSDiffExplainer,
+    "quality-review": cve.QualityReview,
 }
 CVEFeatureName = Enum(
-    "ComponentFeatureName",
+    "CVEFeatureName",
     {name: name for name in cve_feature_registry.keys()},
     type=str,
 )
@@ -247,15 +327,16 @@ CVEFeatureName = Enum(
     response_class=JSONResponse,
 )
 async def cve_analysis(feature: CVEFeatureName, cve_id: CVEID, detail: bool = False):
-    if feature not in cve_feature_registry:
-        raise HTTPException(404, detail=f"CVE feature '{feature}' not found.")
+    feature_name = feature.value
+    if feature_name not in cve_feature_registry:
+        raise HTTPException(404, detail=f"CVE feature '{feature_name}' not found.")
 
-    FeatureClass = cve_feature_registry[feature]
+    FeatureClass = cve_feature_registry[feature_name]
 
     try:
         validated_input = cveid_validator.validate_python(cve_id)
     except Exception as e:
-        msg = f"Invalid input for CVE feature '{feature}'"
+        msg = f"Invalid input for CVE feature '{feature_name}'"
         log_exception_safely(e, msg)
         raise HTTPException(status_code=422, detail=msg)
 
@@ -265,11 +346,20 @@ async def cve_analysis(feature: CVEFeatureName, cve_id: CVEID, detail: bool = Fa
         if detail:
             return result
         return result.output
+    except OSIDBFlawNotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No flaw data found in OSIDB for {e.cve_id}.",
+        )
+    except OSIDBUnauthorizedError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except OSIDBAuthError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        log_exception_safely(e, f"Error executing CVE feature '{feature}'")
+        log_exception_safely(e, f"Error executing CVE feature '{feature_name}'")
         raise HTTPException(
             status_code=500,
-            detail=f"An internal error occurred while executing CVE feature '{feature}'.",
+            detail=f"An internal error occurred while executing CVE feature '{feature_name}'.",
         )
 
 
@@ -287,13 +377,14 @@ async def cve_analysis_with_body(
         log_exception_safely(e, "Missing required field: 'cve_id'")
         raise HTTPException(status_code=400, detail="Missing required field: 'cve_id'")
 
-    if feature.value not in cve_feature_registry:
-        raise HTTPException(404, detail=f"CVE feature '{feature.value}' not found.")
-    FeatureClass = cve_feature_registry[feature.value]
+    feature_name = feature.value
+    if feature_name not in cve_feature_registry:
+        raise HTTPException(404, detail=f"CVE feature '{feature_name}' not found.")
+    FeatureClass = cve_feature_registry[feature_name]
     try:
         validated_input = dict(cve_data)
     except Exception as e:
-        msg = f"Invalid input for CVE feature '{feature}'"
+        msg = f"Invalid input for CVE feature '{feature_name}'"
         log_exception_safely(e, msg)
         raise HTTPException(status_code=422, detail=msg)
 
@@ -305,7 +396,7 @@ async def cve_analysis_with_body(
         validated_input.get("comment_zero") or validated_input.get("cve_description")
     ) or ""
     if (
-        feature.value != "suggest-affected-components"
+        feature_name != "suggest-affected-components"
         and not existing_components
         and validated_input.get("title")
         and description_text
@@ -330,11 +421,20 @@ async def cve_analysis_with_body(
         if detail:
             return result
         return result.output
+    except OSIDBFlawNotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No flaw data found in OSIDB for {e.cve_id}.",
+        )
+    except OSIDBUnauthorizedError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except OSIDBAuthError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        log_exception_safely(e, f"Error executing CVE feature '{feature}'")
+        log_exception_safely(e, f"Error executing CVE feature '{feature_name}'")
         raise HTTPException(
             status_code=500,
-            detail=f"An internal error occurred while executing CVE feature '{feature}'.",
+            detail=f"An internal error occurred while executing CVE feature '{feature_name}'.",
         )
 
 
@@ -355,30 +455,35 @@ ComponentFeatureName = Enum(
 async def component_analysis(
     feature: ComponentFeatureName, component_name: str, detail: bool = False
 ):
-    logging.info(feature)
-    if feature not in component_feature_registry:
-        raise HTTPException(404, detail=f"Component feature '{feature}' not found.")
+    feature_name = feature.value
+    logging.info(feature_name)
+    if feature_name not in component_feature_registry:
+        raise HTTPException(
+            404, detail=f"Component feature '{feature_name}' not found."
+        )
 
-    FeatureClass = component_feature_registry[feature]
-
-    try:
-        validated_input = component_name
-    except Exception as e:
-        msg = f"Invalid input for Component feature '{feature}'"
-        log_exception_safely(e, msg)
-        raise HTTPException(status_code=422, detail=msg)
+    FeatureClass = component_feature_registry[feature_name]
 
     try:
         feature_instance = FeatureClass(agent=llm_agent)
-        result = await feature_instance.exec(validated_input)
+        result = await feature_instance.exec(component_name)
         if detail:
             return result
         return result.output
+    except OSIDBFlawNotFoundError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No flaw data found in OSIDB for {e.cve_id}.",
+        )
+    except OSIDBUnauthorizedError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except OSIDBAuthError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        log_exception_safely(e, f"Error executing Component feature '{feature}'")
+        log_exception_safely(e, f"Error executing Component feature '{feature_name}'")
         raise HTTPException(
             status_code=500,
-            detail=f"An internal error occurred while executing Component feature '{feature}'.",
+            detail=f"An internal error occurred while executing Component feature '{feature_name}'.",
         )
 
 
@@ -555,10 +660,8 @@ async def save_feedback(request: Request, feedback: Feedback):
         accept_str = str(feedback.accept).lower()
         row_data = {
             "feature": feedback.feature,
-            "cve_id": feedback.cve_id
-            or feedback.cveId
-            or "",  # FIXME: an interim compatibility fix for OSIM
-            "email": feedback.email or "",
+            "cve_id": feedback.cve_id,
+            "email": feedback.email,
             "actual": feedback.actual or "",
             "expected": feedback.expected or "",
             "request_time": feedback.request_time or "",
@@ -692,8 +795,8 @@ async def save_programmatic_feedback(request: Request, feedback: ProgrammaticFee
 
     try:
         feature = feedback.feature
-        cve_id = feedback.cve_id or ""
-        email = feedback.email or ""
+        cve_id = feedback.cve_id
+        email = feedback.email
         suggested = feedback.suggested_value or ""
         submitted = feedback.submitted_value or ""
 
@@ -758,3 +861,6 @@ async def save_programmatic_feedback(request: Request, feedback: ProgrammaticFee
             status_code=500,
             detail="An internal error occurred while processing programmatic feedback.",
         )
+
+
+_enrich_openapi_schema()

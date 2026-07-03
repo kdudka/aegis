@@ -1,0 +1,10 @@
+{
+    "url": "https://www.cve.org/CVERecord?id=CVE-2026-44727",
+    "result": {
+        "status": "success",
+        "error_message": null,
+        "url": "https://www.cve.org/CVERecord?id=CVE-2026-44727",
+        "content_type": "application/json",
+        "extracted_text": "{\n  \"descriptions\": [\n    {\n      \"lang\": \"en\",\n      \"value\": \"Jupyter Server is the backend for Jupyter web applications. Prior to 2.20, the nbconvert HTTP handlers in jupyter_server render user-authored notebook HTML under the Jupyter origin without a sandbox directive in their Content-Security-Policy. Combined with nbconvert.HTMLExporter's default non-sanitizing behavior, a notebook carrying an HTML payload in a display_data output triggers stored XSS with cookie access, full /api/* authority, and kernel RCE. This vulnerability is fixed in 2.20.\"\n    }\n  ],\n  \"metrics\": [\n    {\n      \"cvssV4_0\": {\n        \"attackVector\": \"NETWORK\",\n        \"attackComplexity\": \"LOW\",\n        \"attackRequirements\": \"NONE\",\n        \"privilegesRequired\": \"LOW\",\n        \"userInteraction\": \"ACTIVE\",\n        \"vulnConfidentialityImpact\": \"HIGH\",\n        \"vulnIntegrityImpact\": \"HIGH\",\n        \"vulnAvailabilityImpact\": \"HIGH\",\n        \"subConfidentialityImpact\": \"HIGH\",\n        \"subIntegrityImpact\": \"HIGH\",\n        \"subAvailabilityImpact\": \"HIGH\",\n        \"baseScore\": 9.3,\n        \"baseSeverity\": \"CRITICAL\",\n        \"vectorString\": \"CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:A/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H\",\n        \"version\": \"4.0\"\n      }\n    }\n  ],\n  \"affected\": [\n    {\n      \"vendor\": \"jupyter-server\",\n      \"product\": \"jupyter_server\",\n      \"versions\": [\n        {\n          \"version\": \"< 2.20\",\n          \"status\": \"affected\"\n        }\n      ]\n    }\n  ]\n}"
+    }
+}

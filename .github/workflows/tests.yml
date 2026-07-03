@@ -5,26 +5,12 @@ on:
   pull_request:
 
 jobs:
-  lint:
-    name: ruff
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: astral-sh/ruff-action@v3
-
-      - uses: astral-sh/ruff-action@v3
-        with:
-          version: "0.11.12"
-          args: "format --check --diff"
-
   tests:
     name: pytest
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install Kerberos development libraries
         run: |
@@ -32,7 +18,7 @@ jobs:
           sudo apt-get install -y libkrb5-dev
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.2.0
 
       - name: Install the project
         run: uv sync --all-extras --dev

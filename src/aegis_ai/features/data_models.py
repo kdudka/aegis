@@ -24,6 +24,21 @@ class feature_deps:
     # When set, the OSIDB flaw_tool uses this instead of calling OSIDB API.
     # Used when static_context already contains sufficient CVE data (e.g. from web API).
     static_context: Optional[Any] = field(default=None)
+    # Set by SuggestImpact.exec (pre-run) or flaw_tool (at runtime) when OSIDB
+    # data indicates a kernel component.  Read by check_kernel_output to
+    # enforce kernel_impact_tool usage, and by the tool itself to gate
+    # non-kernel calls.
+    is_kernel_cve: bool = field(default=False)
+    # Incremented by kernel_impact_tool each time the LLM invokes it.
+    # check_kernel_output reads this: 0 means the LLM never called the tool
+    # (triggers retry), >0 means it tried (accept, even if classifier_result
+    # is None).
+    classifier_attempts: int = field(default=0)
+    # Pre-computed classifier result from kernel_impact_classify.  Set by
+    # exec() before the LLM run; kernel_impact_tool returns it immediately
+    # via its fast-path cache (mirrors the flaw_tool static_context pattern).
+    # Also read by post-processing (reconciliation, guardrails).
+    classifier_result: Optional[dict] = field(default=None)
 
 
 class FeatureQueryInput(BaseModel):
@@ -35,21 +50,18 @@ class AegisFeatureModel(BaseModel):
     Metadata for Aegis features, nested within the main feature model.
     """
 
-    data_quality: Optional[Literal["POOR", "FAIR", "GOOD", "EXCELLENT"]] = Field(
-        None,
-        description="Overall assessment of the underlying data quality, completeness and internal consistency.",
+    data_quality: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Amount of technical data in the `comment_zero` input field relevant for generating the requested suggestions, ranging from 0.0 (insufficient) to 1.0 (perfect).",
     )
 
     confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="""
-        # Confidence Score Methodology: Quantifying Analytical Reliability
-
-        ## Definition
-        A precision-driven numerical representation of analysis reliability, scaled from 0.00 to 1.00, capturing the probabilistic certainty of analytical accuracy.
-        """,
+        description="Quantification of reliability of the provided suggestion, ranging from 0.0 (guessing) to 1.0 (certainty).  Be conservative in this judgment.",
     )
 
     tools_used: List = Field(

@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10-minimal:10.1-1773895769
+FROM registry.access.redhat.com/ubi10-minimal:10.2-1782798957@sha256:b217fa65d8c21058887b18f005f587e47a17dd1281a5196ac88d01724a273dbd
 
 LABEL summary="AEGIS" \
       maintainer="Product Security DevOps <prodsec-dev@redhat.com>"
@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_INDEX_URL="${PIP_INDEX_URL}" \
     UV_NO_CACHE=off \
-    UV_NATIVE_TLS=true \
+    UV_SYSTEM_CERTS=true \
     UV_PROJECT_ENVIRONMENT="/opt/app-root/.venv" \
     REQUESTS_CA_BUNDLE="/etc/pki/tls/certs/ca-bundle.crt"
 
@@ -26,7 +26,6 @@ RUN microdnf --nodocs --setopt install_weak_deps=0 -y install \
     python3-pip \
     redhat-rpm-config \
     tar \
-    && microdnf --nodocs --setopt install_weak_deps=0 -y upgrade \
     && microdnf clean all
 
 # create a non-privileged user
@@ -43,13 +42,13 @@ COPY --chown=aegis . /opt/app-root
 # install uv, install local dependencies and initialize version string
 RUN set -o pipefail \
     && pip3 install --no-cache-dir gssapi uv \
-    && uv sync --no-cache --frozen \
+    && uv sync --no-cache --frozen --extra classifier_deps \
     && printf '\n[tool.hatch.version.raw-options]\nfallback_version = "%s"\n' \
         "$(uv run python -c 'import aegis_ai; print(aegis_ai.__version__)')" \
     | tee -a pyproject.toml
 
-# remove git repo (and files maintained in it) after the version string is initialized
-RUN rm -fr .git docs src/aegis_ai_ml/src/classifier/kernel-cve-impact-classifier
+# remove git repo, docs, and bulky classifier training artifacts
+RUN rm -fr .git docs src/aegis_ai_ml/src/classifier/kernel-cve-impact-classifier/{data,test-results}
 
 RUN chgrp -R 0 /opt/app-root && \
     chmod -R g=u /opt/app-root

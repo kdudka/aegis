@@ -1,7 +1,8 @@
+import math
+from typing import get_args
+
 import cvss
 import pytest
-
-from typing import get_args
 
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
@@ -9,6 +10,7 @@ from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorCont
 from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.cve import SuggestImpact, SuggestImpactModel
+from aegis_ai.kernel_classifier import is_kernel_component
 
 from evals.features.common import (
     common_feature_evals,
@@ -17,6 +19,7 @@ from evals.features.common import (
     reflect_confidence,
     run_evaluation,
 )
+from evals.utils.osidb_cache import read_cache_json
 
 
 # dict to convert "IMPORTANT" to 8.0 etc
@@ -161,12 +164,59 @@ class CVSSVectorEvaluator(Evaluator[str, SuggestImpactModel]):
         return EvaluationReason(value=score, reason=reason)
 
 
+class DataQualityEvaluator(Evaluator[str, SuggestImpactModel]):
+    """Compare data_quality with the expected value when specified"""
+
+    _sigma = 0.1  # controls tolerance: ~0.61 at ±0.1, ~0.14 at ±0.2
+
+    def evaluate(
+        self, ctx: EvaluatorContext[str, SuggestImpactModel]
+    ) -> EvaluationReason:
+        assert ctx.expected_output is not None
+        got = ctx.output.data_quality
+        expected = ctx.expected_output.data_quality
+        diff = got - expected
+
+        # Gaussian similarity
+        score = math.exp(-(diff**2) / (2 * self._sigma**2))
+        reason = None if score >= 1.0 else f"got {got}, expected {expected}"
+        return EvaluationReason(value=score, reason=reason)
+
+
 # some evaluators are only applicable if the expected output for a specific field is provided
 field_evaluators = {
     "impact": ImpactEvaluator(),
     "cvss3_score": CVSSScoreEvaluator(),
     "cvss3_vector": CVSSVectorEvaluator(),
 }
+
+kernel_scope_judge = create_llm_judge(
+    assertion_name="CVSSKernelScopeAndPrivileges",
+    rubric=(
+        "For Linux kernel or low-level CVEs, the explanation must justify PR, S, C, and I "
+        "in a way consistent with the vector: use PR:H when admin-class capabilities "
+        "(e.g. CAP_SYS_ADMIN, CAP_NET_ADMIN) are required to trigger the bug; use S:U "
+        "unless the described effect crosses a security boundary (e.g. container escape to host); "
+        "do not set C:H/I:H for purely internal kernel state issues without a plausible "
+        "user-data impact path. "
+        "Exception for user namespaces: on modern Linux, unprivileged users can create "
+        "network namespaces via user namespaces (unshare(CLONE_NEWUSER | CLONE_NEWNET)) "
+        "without host-level CAP_NET_ADMIN. When the explanation mentions network namespace "
+        "manipulation but also indicates the operation is reachable from an unprivileged "
+        "local user (e.g. via user namespaces or container environments), PR:L is acceptable "
+        "because the effective capability is scoped to the user namespace, not the host. "
+        "Consistency rule for PR: the judge must only check that the explanation is internally "
+        "consistent with the chosen PR value in the vector. If the vector uses PR:H and the "
+        "explanation cites admin-class capabilities as required, that is consistent — accept "
+        "it. If the vector uses PR:L and the explanation mentions capabilities or privileged "
+        "operations as background context while also describing an unprivileged trigger path "
+        "(e.g. normal file I/O, packet reception, user-namespace-scoped operations, BPF "
+        "program loading via unprivileged BPF, device events during normal use, "
+        "worker/interrupt-context races), that is also consistent — accept it. "
+        "Fail only when the explanation describes exclusively admin-only trigger paths with "
+        "no plausible unprivileged alternative and the vector still uses PR:L."
+    ),
+)
 
 
 class SuggestImpactCase(Case):
@@ -176,6 +226,7 @@ class SuggestImpactCase(Case):
         expected_impact=None,
         expected_cvss3_score=None,
         expected_cvss3_vector=None,
+        data_quality=None,
         **kwargs,
     ):
         """evaluation case for suggest-impact, cve_id is the input, expected_* is the expected output"""
@@ -194,27 +245,35 @@ class SuggestImpactCase(Case):
         expected_output = SuggestImpactModel(
             cve_id=cve_id,
             title="",
-            components=[],
-            affected_products=[],
             explanation="",
             impact=expected_impact,
             cvss3_score=str(expected_cvss3_score),
             cvss3_vector=expected_cvss3_vector,
+            data_quality=data_quality if data_quality is not None else 1.0,
             confidence=1.0,
             tools_used=[],
             disclaimer=disclaimer,
         )
 
         # enable field-specific evaluators for this case
-        evaluators = tuple(
+        evaluators: list[Evaluator] = list(
             field_evaluators[f] for f in field_evaluators if getattr(expected_output, f)
         )
+
+        if data_quality is not None:
+            evaluators.append(DataQualityEvaluator())
+
+        cached = read_cache_json(cve_id)
+        components = cached.get("components", []) if cached else []
+
+        if is_kernel_component(components):
+            evaluators.append(kernel_scope_judge)
 
         super().__init__(
             name=f"suggest-impact-for-{cve_id}",
             inputs=cve_id,
             expected_output=expected_output,
-            evaluators=evaluators,
+            evaluators=tuple(evaluators),
             **kwargs,
         )
 
@@ -272,10 +331,16 @@ cases = [
         expected_cvss3_score=7.5,
     ),
     # FIXME: scope is wrong (Aegis suggests S:C while S:U is expected)
+    # FIXME: mounting a JFS filesystem requires CAP_SYS_ADMIN, yet Aegis uses PR:L
     SuggestImpactCase(
         cve_id="CVE-2023-53222",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H",
-        metadata={"known_to_fail_evaluators": ["CVSSVectorEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CVSSKernelScopeAndPrivileges",
+                "CVSSVectorEvaluator",
+            ]
+        },
     ),
     SuggestImpactCase(
         cve_id="CVE-2023-53491",
@@ -284,6 +349,7 @@ cases = [
     SuggestImpactCase(
         cve_id="CVE-2023-53510",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:H",
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2023-53693",
@@ -305,13 +371,14 @@ cases = [
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:H",
     ),
     SuggestImpactCase(
+        cve_id="CVE-2023-54201",
+        expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
+    ),
+    SuggestImpactCase(
         cve_id="CVE-2024-53232",
         expected_impact="MODERATE",
         expected_cvss3_score=4.4,
-    ),
-    SuggestImpactCase(
-        cve_id="CVE-2023-54201",
-        expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H",
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-5399",
@@ -335,6 +402,7 @@ cases = [
     SuggestImpactCase(
         cve_id="CVE-2025-13609",
         expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:C/C:L/I:H/A:L",
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-13772",
@@ -365,6 +433,7 @@ cases = [
         cve_id="CVE-2025-39677",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H",
     ),
+    # Also present in the kernel eval suite (eval-kernel-cves.csv)
     SuggestImpactCase(
         cve_id="CVE-2025-39754",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:N/A:H",
@@ -376,14 +445,18 @@ cases = [
     SuggestImpactCase(
         cve_id="CVE-2025-39795",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:L/PR:H/UI:N/S:U/C:N/I:L/A:L",  # if chunk_sectors is erroneously treated as aligned, it could incorrectly write to storage
+        # LLM explanation sometimes overstates the low integrity impact in prose.
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-39809",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:H",  # Since Integrity can in theory be affeceted if the stack memory corruption overwrite adjacent local variables. Sure, the overwrite is small, one byte, but could still technically cause problems depending what it overwrites.
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-39810",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:N/I:H/A:H",  # C:N bc OOBW could overwrite adjacent k memory, but no direct exposure implied. AC:H bc exploitation requires hw-dependent firmware behavior, TC configuration, and precise timing around ifdown and fw resource renegotiation. PR:H bc you need `CAP_NET_ADMIN` privileges to be able to configure traffic classes (tc)
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-39816",
@@ -392,6 +465,7 @@ cases = [
     SuggestImpactCase(
         cve_id="CVE-2025-39821",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:N/I:L/A:H",  # C: no kernel memory disclosed and no data copied from kernel to userspace, I: bug can cause invalid pmu register operations, but doesn't allow controlled corruption of arbitrary k memory, A: invalid pmu operations could destabilize the perf subsystem.
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-39822",
@@ -407,13 +481,23 @@ cases = [
     SuggestImpactCase(
         cve_id="CVE-2025-39939",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:H",
-        metadata={"known_to_fail_evaluators": ["CVSSVectorEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CVSSVectorEvaluator",
+                "CVSSKernelScopeAndPrivileges",
+            ]
+        },
     ),
     # FIXME: scope is wrong (Aegis suggests S:C while S:U is expected)
     SuggestImpactCase(
         cve_id="CVE-2025-40320",
         expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:R/S:U/C:L/I:H/A:H",
-        metadata={"known_to_fail_evaluators": ["CVSSVectorEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "CVSSVectorEvaluator",
+                "CVSSKernelScopeAndPrivileges",
+            ]
+        },
     ),
     SuggestImpactCase(
         cve_id="CVE-2025-50334",
@@ -451,6 +535,149 @@ cases = [
         expected_impact="MODERATE",
         expected_cvss3_score="6.3",
         expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L",
+        metadata={"known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"]},
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-4705",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H",
+        data_quality=0.6,
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-4718",
+        expected_impact="LOW",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:N/A:N",
+        data_quality=0.6,
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-4724",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+        data_quality=0.6,
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-21727",
+        expected_impact="LOW",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-23361",
+        expected_cvss3_vector="CVSS:3.1/AV:L/AC:L/PR:L/UI:N/S:U/C:N/I:N/A:H",
+        metadata={
+            "known_to_fail_evaluators": [
+                "CVSSKernelScopeAndPrivileges",
+                "CVSSVectorEvaluator",
+            ]
+        },
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-23376",
+        expected_impact="LOW",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-28387",
+        expected_impact="LOW",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-28388",
+        expected_impact="LOW",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-32144",
+        expected_impact="IMPORTANT",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-33691",
+        expected_impact="MODERATE",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-33993",
+        expected_impact="MODERATE",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-34073",
+        expected_impact="LOW",
+        metadata={"known_to_fail_evaluators": ["NoAffectsInExplanation"]},
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-34444",
+        expected_impact="IMPORTANT",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-34978",
+        expected_impact="MODERATE",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-34980",
+        expected_impact="MODERATE",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-35386",
+        expected_impact="LOW",
+        expected_cvss3_vector="CVSS:3.1/AV:L/AC:H/PR:L/UI:N/S:U/C:L/I:L/A:N",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-35537",
+        expected_impact="LOW",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:N",
+        metadata={"known_to_fail_evaluators": ["ImpactEvaluator"]},
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-39946",
+        expected_impact="MODERATE",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-40193",
+        expected_impact="IMPORTANT",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-40575",
+        expected_impact="IMPORTANT",  # mbenatto: This vulnerability is configuration dependent, so it doesn't fit as a Critical
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-40611",
+        expected_impact="IMPORTANT",  # mbenatto: This vulnerability doesn't meet the criteria to be classified as CRITICAL according to our public severity policy.
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-40892",
+        expected_impact="IMPORTANT",
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-40938",
+        # mbenatto: This flaw requires a certain user privileges to be exploited, this means it doesn't fits our security policy for criticals by default.
+        # Additionally the CVSS score seems wrong when it assumes AC:L. Looking at upstream advisory:
+        # Attack complexity is High because the exploit requires either:
+        # A valid git repository at a known, predicable path on the resolver pod (e.g., /tmp/<reponame>-<suffix> from a concurrent resolution), or
+        # A default-URL configuration pointing at a local path
+        expected_impact="IMPORTANT",
+        metadata={"known_to_fail_evaluators": ["NoAffectsInExplanation"]},
+    ),
+    SuggestImpactCase(
+        cve_id="CVE-2026-43914",
+        expected_impact="IMPORTANT",
+    ),
+    # Analyst feedback (AEGIS-368): upstream CVSS from cve.org shows AV:N/PR:N/UI:N,
+    # but Aegis previously suggested AV:L/PR:L/UI:R without reading external references.
+    SuggestImpactCase(
+        cve_id="CVE-2026-31973",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+    ),
+    # Analyst feedback (AEGIS-368): Moderate, as reported by upstream.
+    SuggestImpactCase(
+        cve_id="CVE-2026-32889",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:N/A:H",
+    ),
+    # Analyst feedback (AEGIS-368): upstream reports AV:N but Aegis mistakenly believes AV:L.
+    SuggestImpactCase(
+        cve_id="CVE-2026-32946",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:N/A:N",
+    ),
+    # Analyst feedback (AEGIS-368): cve.org has the upstream CVSS.
+    SuggestImpactCase(
+        cve_id="CVE-2026-33298",
+        expected_impact="IMPORTANT",
+        expected_cvss3_vector="CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
     ),
 ]
 

@@ -86,6 +86,27 @@ def test_save_feedback_validation_error_missing_field():
     response = client.post("/api/v1/feedback", json=feedback_data)
 
     assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, list) and len(detail) >= 1
+    assert any("feature" in err.get("loc", []) for err in detail)
+
+
+def test_save_feedback_validation_error_missing_cve_id_includes_detail():
+    """Missing cve_id returns 422 with a JSON body describing the error."""
+    feedback_data = {
+        "feature": "suggest-cwe",
+        "email": "joey@redhat.com",
+        "accept": True,
+    }
+    response = client.post("/api/v1/feedback", json=feedback_data)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert "detail" in body
+    assert any(
+        err.get("type") == "missing" and "cve_id" in (err.get("loc") or [])
+        for err in body["detail"]
+    )
 
 
 def test_save_feedback_validation_error_bad_accept():
@@ -150,6 +171,7 @@ async def test_submit_feedback_after_suggest_impact_analysis(feedback_log_setup)
     feedback_data = {
         "feature": "suggest-impact",
         "cve_id": cve_id,
+        "email": "user@example.com",
         "actual": actual_impact,
         "expected": expected_impact,
         "accept": False,
@@ -202,6 +224,7 @@ def test_save_feedback_exception_handling(feedback_log_setup, monkeypatch):
     feedback_data = {
         "feature": "suggest-impact",
         "cve_id": "CVE-2025-12345",
+        "email": "user@example.com",
         "accept": True,
     }
     response = client.post("/api/v1/feedback", json=feedback_data)

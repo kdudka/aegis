@@ -4,6 +4,151 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-06-26
+
+### Changed
+- `osidb-bot` now records `data_quality` and `confidence` in `aegis_meta`, including when suggestions are discarded
+- migrated MCP servers from deprecated `MCPServerStdio` to `MCPToolset` + `StdioTransport` (pydantic-ai v2)
+- treat empty env vars as unset in `get_env_*()` settings helpers
+
+### Added
+- added `quality-review` feature with weighted FQI (Flaw Quality Index) rubric and Customer Lens
+- added `external_references_tool` for fetching CVE reference URLs
+- added `--read-only` option to `osidb-bot` to skip OSIDB data updates
+- added `--force` option to `osidb-bot` to skip flaw eligibility validation
+- added Maven ecosystem eval cases for `suggest-affected-components` using `groupId/artifactId` format
+
+### Fixed
+- handle Mozilla CVEs with sparse `comment_zero`
+- bound memory for kernel patch and HTML fetches in the classifier
+- resolve specific artifacts instead of umbrella project names in `suggest-affected-components`
+- improved tool call logging readability
+
+
+## [0.7.4] - 2026-06-05
+
+### Fixed
+- `osidb-bot` no longer processes flaws with empty state
+- `osidb-bot` now excludes flaws without a CVE ID from processing
+- replaced deprecated `UV_NATIVE_TLS` with `UV_SYSTEM_CERTS` in container image
+
+
+## [0.7.3] - 2026-06-05
+
+### Changed
+- `suggest-cwe` now filters out Prohibited and Discouraged CWEs from suggestions
+
+### Added
+- `suggest-affected-components` now suggests upstream `ecosystems` for affected components
+- `osidb-bot` now records suggested ecosystems in `aegis_meta`
+- added `osv_dev_ghsa` tool for GHSA lookups via OSV.dev
+- added evaluation cases with ecosystem ground-truth for `suggest-affected-components`
+- added GHSA cache for OSV.dev responses in the evaluation suite
+- show actual/expected output when `DataQualityEvaluator` fails
+
+### Fixed
+- use full Go module paths in `suggest-affected-components`
+- use bare package names without ecosystem prefixes in `suggest-affected-components`
+- corrected `glib` component mapping in `suggest-affected-components`
+- `osidb-bot` now covers all currently used CVE source types
+- retry LLM prompt on `ModelHTTPError: status_code: 502`
+
+
+## [0.7.2] - 2026-05-25
+
+### Changed
+- `osidb-bot` now discards low-quality suggestions
+- `suggest-impact` revision now uses a self-contained prompt for better performance
+- reworked the definition of `data_quality` and `confidence` to provide more meaningful values
+- retrained kernel CVE impact classifier with refreshed patch data
+
+### Added
+- added semantic scoring for `suggest-affected-components` feedback
+- added `DataQualityEvaluator` for `suggest-impact` 
+- included `data_quality` and `confidence` in evaluation results of `suggest-affected-components`
+- added evaluation cases based on feedback from security analysts
+- retry LLM prompt on `ModelHTTPError: status_code: 504` and `UnexpectedModelBehavior` exceptions
+- deduplicate stable-backport patches before sending to the LLM in the kernel classifier
+
+### Fixed
+- do not suggest `kernel` component for `macOS` CVEs
+- `osidb-bot` now checks for existing RH CVSS early to avoid unnecessary resource consumption
+- `osidb-bot` now skips incomplete impact suggestions without logging a traceback
+- prevent kernel tool leakage into non-impact features and ensure kernel classifier runs before agent for kernel CVEs
+- strengthened prompt guidance to discourage CRITICAL impact suggestions
+- generate `override_note` when CVSS score changes without vector change
+- apply `llm_prompt_timeout` to `suggest-impact` revision calls and fix failure handling
+- drop misleading CVSS ignore clause from `suggest-impact` prompt
+- improved tool call logging readability
+- suppressed `MCPServerStdio` deprecation warnings
+- increased `pydantic-ai` output retries and added logging for validation failures
+
+
+## [0.7.1] - 2026-05-12
+
+### Added
+- added a CI test to check that no git-tracked files are excluded by `.dockerignore`
+
+### Fixed
+- replaced deprecated `retries` with `tool_retries` in pydantic-ai agent configuration
+- fixed stable release versioning
+
+
+## [0.7.0] - 2026-05-11
+
+### Changed
+- `suggest-impact` now incorporates kernel patch context and integrates the kernel impact classifier for severity reconciliation on kernel CVEs
+- the `suggest-impact` explanation is revised when the kernel classifier adjusts the score or impact
+
+### Added
+- added `--refresh-cache` flag to regenerate OSIDB cache entries in evals
+- added verbose pipeline diagnostics to `suggest-impact`
+- added evaluation cases and annotations based on feedback from security analysts
+- documented eval framework, environment variables, and guardrail docstrings
+
+### Fixed
+- improved `suggest-affected-components` accuracy and Chromium sub-component mapping
+- do not suggest sub-services as separate affected components
+- addressed security scanner findings in OpenAPI and container image
+- deferred safety agent import until after the enabled check
+
+
+## [0.6.3] - 2026-04-27
+
+### Changed
+- improved kernel CVE classifier training pipeline with better feature extraction
+- retrained kernel classifier with 83 additional IMPORTANT CVEs and expanded test set
+- penalize long lists in the output of `suggest-affected-components` evals
+- exclude `affects` from the input of `suggest-affected-components`
+
+### Added
+- added kernel impact classifier runtime module
+- added evaluation cases and annotations based on feedback from security analysts
+- CI can skip evals when the PR description contains `CI: skip-pr-evals`
+
+### Fixed
+- improved LLM prompt templates based on feedback
+- do not suggest fields unrelated to a specific feature
+- do not suggest `title` and `components` in `suggest-cwe`
+- do not mention exploit availability in suggestions
+- added a hint for CWE-617 to CWE tool
+- improved error handling in `component-intelligence` API endpoint
+- improved handling of OSIDB auth and lookup failures
+- improved handling of validation errors in feedback API endpoints
+- made certain fields required in feedback API endpoints
+- avoid logging of GSSAPI tracebacks in non-debug mode
+
+
+## [0.6.2] - 2026-03-23
+
+### Added
+- added a few more annotations for occasionally failing evaluation cases
+
+### Fixed
+- adjusted prompt so drafted statements do not show the impact in all caps
+- improved handling of `osidb-bot` authentication failures while connecting to OSIDB
+
+
 ## [0.6.1] - 2026-03-18
 
 ### Changed

@@ -1,4 +1,4 @@
-from typing import Optional, Dict
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -33,18 +33,17 @@ class AegisPrompt(BaseModel):
 
     # Contextual information should always come in as structured input
     context: BaseModel
-    static_context: Optional[Dict] = None
 
     # Output data schema
-    output_schema: Optional[Dict] = None
+    output_schema: Optional[dict] = None
 
     async def is_safe(self):
         """Prompt safety check"""
-        from aegis_ai.agents.safety import default as safety_agent
-
         if not (get_settings().safety_enabled):
             logger.debug("Safety agent check is disabled.")
             return True
+
+        from aegis_ai.agents.safety import default as safety_agent
 
         safety_result = await safety_agent.run(self.to_string())
         return "No" in safety_result.output
@@ -67,9 +66,6 @@ class AegisPrompt(BaseModel):
 
         if self.context:
             prompt_parts.append(f"Context:\n{self.context}")
-
-        if self.static_context:
-            prompt_parts.append(f"Context:\n{self.static_context}")
 
         if self.output_schema:
             prompt_parts.append(

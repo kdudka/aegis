@@ -1,7 +1,7 @@
 from aegis_ai import get_settings
 from aegis_ai.osidb_bot.state import BotState, StateFileHandler
-from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST
-from aegis_ai.osidb_bot.util import FlawData, logger
+from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST, _KERNEL_FLAGS_KEY
+from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 from aegis_ai.data_models import CVEID
 
 from pydantic_ai import Agent
@@ -19,16 +19,34 @@ from typing import Any, Optional, Sequence, cast
 
 
 ELIGIBLE_FLAWS = {
-    # only flaws coming from collectors
+    # only flaws coming from the following sources
     "source": (
-        # TODO: extend the sequence
+        "APPLE",
+        "CERT",
+        "CUSTOMER",
+        "CVE",
         "CVEORG",
+        "DEBIAN",
+        "DISTROS",
+        "GENTOO",
+        "GOOGLE",
+        "HW_VENDOR",
+        "INTERNET",
+        "MAGEIA",
+        "MOZILLA",
+        "NVD",
+        "OPENSSL",
+        "OSSSECURITY",
+        "OSV",
+        "REDHAT",
+        "RESEARCHER",
+        "SECUNIA",
+        "SUSE",
+        "UBUNTU",
+        "UPSTREAM",
     ),
-    # only flaws in the NEW/empty state
-    "classification": (
-        {"workflow": "DEFAULT", "state": "NEW"},
-        {"workflow": "DEFAULT", "state": ""},
-    ),
+    # only flaws in the NEW state
+    "classification": ({"workflow": "DEFAULT", "state": "NEW"},),
     # only flaws where Aegis has not been used yet
     "aegis_meta": ({},),
     # only flaws with no affects
@@ -92,6 +110,7 @@ class FlawFinder:
         # infer search predicates from ELIGIBLE_FLAWS
         kwargs: dict[str, Any] = {
             "include_fields": ["cve_id"],
+            "cve_id__isempty": False,  # only flaws with a CVE ID
             "order": ["created_dt"],
             "source_in": [s for s in ELIGIBLE_FLAWS["source"]],
             "workflow_state_in": [
@@ -142,6 +161,8 @@ class FlawUpdater:
     osidb: Session
     agent: Agent
     cve: CVEID
+    force: bool
+    read_only: bool
 
     # OSIDB flaw from session.flaws.retrieve()
     flaw_data: Optional[FlawData]
@@ -149,10 +170,20 @@ class FlawUpdater:
     # list of fields updated by the agent
     updated_fields: set[str]
 
-    def __init__(self, osidb: Session, agent: Agent, cve: CVEID):
+    def __init__(
+        self,
+        osidb: Session,
+        agent: Agent,
+        cve: CVEID,
+        *,
+        force: bool = False,
+        read_only: bool = False,
+    ):
         self.osidb = osidb
         self.agent = agent
         self.cve = cve
+        self.force = force
+        self.read_only = read_only
         self.updated_fields = set()
 
         try:
@@ -180,8 +211,9 @@ class FlawUpdater:
             created_dt=datetime.fromisoformat(self.flaw_data["created_dt"]),
         )
 
-    async def apply_suggestions(self) -> None:
+    async def apply_suggestions(self) -> bool:
         assert self.flaw_data
+        all_ok: bool = True
 
         # query current server time once (before requesting suggestions)
         timestamp: Optional[datetime] = None
@@ -196,20 +228,96 @@ class FlawUpdater:
 
         # requests suggestions sequentially one by one
         for fnc in DEFAULT_SUGGESTION_LIST:
-            self.updated_fields |= await fnc(self.agent, self.flaw_data, timestamp)
+            try:
+                self.updated_fields |= await fnc(self.agent, self.flaw_data, timestamp)
+            except RuntimeError as e:
+                all_ok = False
+                self._warn(str(e))
 
-        if not self.updated_fields:
-            # nothing has changed
-            raise RuntimeError("left unchanged")
+        if not self.updated_fields and not self.force:
+            # nothing has changed (unexpectedly)
+            self._warn("left unchanged")
+            return False
+
+        if not all_ok:
+            # something has already failed
+            return False
+
+        aegis_meta = self.flaw_data.get("aegis_meta", {})
+        if not isinstance(aegis_meta, dict):
+            self._warn("unexpected type of aegis_meta")
+            return False
+
+        # if everything is OK check that no suggestion was discarded with this timestamp
+        return not any(
+            entry.get("type", "") == "AI-Bot-Skipped"
+            and entry.get("timestamp", None) == timestamp.isoformat()
+            for sublist in aegis_meta.values()
+            if isinstance(sublist, list)  # skip over ["processed"], which is bool
+            for entry in sublist
+            if isinstance(entry, dict)  # guard against malformed OSIDB data
+        )
+
+    def create_alias_label(self, label_name: str) -> bool:
+        """create a flaw label of type "alias" with name label_name, return True on success"""
+        assert self.flaw_data
+        try:
+            flaw_uuid = self.flaw_data["uuid"]
+            cast(Any, self.osidb.flaws).labels.create(
+                flaw_id=flaw_uuid,
+                form_data={
+                    "label": label_name,
+                    "type": "alias",
+                    "state": "NEW",
+                },
+            )
+            self._info(f"created label '{label_name}'")
+            return True
+
+        except Exception as e:
+            msg = f"failed to create label '{label_name}' ({e.__class__.__name__})"
+            self._warn(msg)
+            logger.debug("%s: %s", self.cve, e)
+            return False
+
+    def _create_labels(self) -> None:
+        assert self.flaw_data
+        entries = self.flaw_data.get("aegis_meta", {}).get(_KERNEL_FLAGS_KEY, [])
+        labels: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                val = entry.get("value", [])
+                if isinstance(val, list):
+                    labels.extend(val)
+        labels = list(dict.fromkeys(labels))
+
+        any_update = False
+        for label_name in labels:
+            if self.create_alias_label(label_name):
+                any_update = True
+
+        if not any_update:
+            self.updated_fields.discard(_KERNEL_FLAGS_KEY)
 
     async def do(self) -> None:
         assert self.flaw_data
 
         # validate eligibility on the fresh flaw data to avoid TOCTOU
-        FlawFinder.validate(self.flaw_data)
+        try:
+            FlawFinder.validate(self.flaw_data)
+        except RuntimeError as e:
+            if self.force:
+                self._warn(f"bypassing flaw eligibility check: {str(e)}")
+            else:
+                raise
 
         # apply suggestions
-        await self.apply_suggestions()
+        all_ok = await self.apply_suggestions()
+
+        if self.read_only:
+            msg = f"read-only mode, skipping OSIDB update of {self.updated_fields}"
+            self._warn(msg)
+            return
 
         # mark the flaw as processed by Aegis/osidb-bot
         aegis_meta = self.flaw_data.setdefault("aegis_meta", {})
@@ -234,6 +342,9 @@ class FlawUpdater:
                 )
 
         except Exception as e:
+            # failed to save changes
+            all_ok = False
+
             msg_suffix = f"({e.__class__.__name__})"
             if flaw_saved:
                 self._warn(f"failed to save RH CVSS {msg_suffix}")
@@ -255,8 +366,14 @@ class FlawUpdater:
             # log full exception in debug mode only
             logger.debug(f"{self.cve}: {str(e)}")
 
+        if _KERNEL_FLAGS_KEY in self.updated_fields:
+            self._create_labels()
+
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
+
+        if not all_ok:
+            self.create_alias_label("manual-triage")
 
 
 class Bot:
@@ -265,22 +382,32 @@ class Bot:
     osidb: Session
     total: int
     pending: dict[BotState, bool]
+    force: bool
+    read_only: bool
 
-    @staticmethod
-    def _fail(msg):
-        raise RuntimeError(f"[osidb-bot] {msg}")
-
-    def __init__(self, state_file_handler: StateFileHandler, agent: Agent):
+    def __init__(
+        self,
+        state_file_handler: StateFileHandler,
+        agent: Agent,
+        *,
+        force: bool = False,
+        read_only: bool = False,
+    ):
         self.sfh = state_file_handler
         self.agent = agent
+        self.force = force
+        self.read_only = read_only
         self.total = 0
         self.pending = {}
         try:
             osidb_server = get_settings().osidb_server_url
             self.osidb = osidb_bindings.new_session(osidb_server_uri=osidb_server)
 
-        except requests.exceptions.ConnectionError as e:
-            Bot._fail(f"failed to establish OSIDB session: {e}")
+        except (
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError,
+        ) as e:
+            raise RuntimeError(f"failed to establish OSIDB session: {e}")
 
     def search_cve_ids(self) -> Sequence[CVEID]:
         finder = FlawFinder(self.osidb)
@@ -290,7 +417,13 @@ class Bot:
         flaw_updater: Optional[FlawUpdater] = None
 
         try:
-            flaw_updater = FlawUpdater(self.osidb, self.agent, cve)
+            flaw_updater = FlawUpdater(
+                self.osidb,
+                self.agent,
+                cve,
+                force=self.force,
+                read_only=self.read_only,
+            )
             self.pending[flaw_updater.state()] = True  # mark as pending
             await flaw_updater.do()
 
@@ -314,14 +447,16 @@ class Bot:
                 del self.pending[state]
 
             # do not update state file if the CVE with lowest created_dt is still being processed
-            if state:
+            if not self.read_only and state:
                 # update state file
                 self.sfh.write_state(state)
 
     async def process_cve_bounded(self, i: int, cve: CVEID) -> None:
         async with max_jobs_sem:
             logger.info(f"[{i}/{self.total}] processing {cve}")
+            log_memory(f"cve_start({cve})")
             await self.process_cve(cve)
+            log_memory(f"cve_end({cve})")
 
     async def process(self, cve_ids: Sequence[CVEID] = ()) -> None:
         if not cve_ids:
@@ -333,6 +468,8 @@ class Bot:
             logger.info("nothing to do")
             return
 
+        log_memory(f"batch_start({self.total}_cves)")
         await asyncio.gather(
             *[self.process_cve_bounded(*job) for job in enumerate(cve_ids, start=1)]
         )
+        log_memory("batch_end")

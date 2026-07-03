@@ -1,0 +1,10 @@
+{
+    "url": "https://cna.openjsf.org/security-advisories.html",
+    "result": {
+        "status": "blocked",
+        "error_message": "URL not in allowlist: cna.openjsf.org",
+        "url": "https://cna.openjsf.org/security-advisories.html",
+        "content_type": null,
+        "extracted_text": null
+    }
+}

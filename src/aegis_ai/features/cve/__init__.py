@@ -1,12 +1,16 @@
+import asyncio
 import cvss
 import logging
 from typing import Any
 
-from aegis_ai import remove_keys
+from aegis_ai import get_settings
 from aegis_ai.data_models import CVEID
 from aegis_ai.features import Feature
 from aegis_ai.features.cve.data_models import (
+    CATEGORY_WEIGHTS,
     CVSSDiffExplainerModel,
+    QualityReviewModel,
+    RevisedExplanationModel,
     SuggestAffectedComponentsModel,
     SuggestImpactModel,
     SuggestCWEModel,
@@ -15,11 +19,27 @@ from aegis_ai.features.cve.data_models import (
     SuggestDescriptionModel,
 )
 from aegis_ai.features.cve.data_models import CVEFeatureInput
+from aegis_ai.features.cve.kernel import (
+    RULES_KERNEL,
+    apply_kpanic_cvss_override,
+    check_kernel_output,
+    reconcile_kernel,
+)
+from aegis_ai.features.cve.impact_mappings import SEVERITY_ORDER, score_to_band
 from aegis_ai.features.data_models import feature_deps
+from aegis_ai.kernel_classifier import is_kernel_component
 from aegis_ai.prompt import AegisPrompt
 from aegis_ai.toolsets.tools.cwe import cwe_manager
+import aegis_ai.toolsets.tools.osidb as osidb_tool
 
 logger = logging.getLogger(__name__)
+
+# Classifier feature -> OSIDB label name.
+# Multiple features can map to the same label (deduped).
+_FLAG_TO_LABEL: dict[str, str] = {
+    "kernel_panic": "kpanic",
+    "kernel_panic_plus_uaf": "kpanic",
+}
 
 
 class SuggestImpact(Feature):
@@ -48,48 +68,396 @@ class SuggestImpact(Feature):
         )
         output.cvss3_score = f"{cvss3_score_by_vector}"
 
+    _RULES_BASE = """
+                - Output format (must follow exactly):
+                    - cvss3_vector: "CVSS:3.1/AV:X/AC:X/PR:X/UI:X/S:X/C:X/I:X/A:X"
+                      where AV in [N,A,L,P], AC in [L,H], PR in [N,L,H], UI in [N,R], S in [U,C], C/I/A in [N,L,H].
+                    - cvss3_score: numeric string matching the vector (we will verify and adjust if needed).
+                    - impact: Critical/Important/Moderate/Low based on the score.
+                      CRITICAL (CVSS > 9.0) is exceptionally rare in Red Hat's taxonomy (< 2% of all CVEs). It requires unauthenticated remote exploitation (AV:N/AC:L/PR:N/UI:N) with broad impact across at least two of C:H, I:H, A:H affecting user data. When uncertain between CRITICAL and IMPORTANT, choose IMPORTANT.
+                - Metric selection guide:
+                    - AV: N if reachable over network from off-host; A if same subnet/Bluetooth/802.11 link-limited; L if requires local account/session/CLI/local IPC; P if requires physical access.
+                    - AC: H if requires uncommon configuration, precise timing/race, multiple conditions, or lengthy preparation; else L.
+                    - PR: N if no prior auth; L if basic/local user privileges are enough; H if admin/root/high-privileges are required to trigger.
+                    - Linux capabilities: Treat required CAP_SYS_ADMIN, CAP_NET_ADMIN, CAP_NET_RAW, CAP_SYS_MODULE, and similar admin-class capabilities as strong evidence for PR:H when the vulnerable operation cannot be triggered without them.
+                    - Kernel attack surface: Mounting filesystems (mount(2)), loading filesystem or network driver modules, configuring interfaces or traffic classes, or privileged ioctls usually implies PR:H unless the advisory clearly shows exploitation by an unprivileged user without those capabilities (e.g. unprivileged user namespaces with a specific exposed entry point).
+                    - UI: R if victim must click/open/provide content; else N.
+                    - S: C only when exploitation changes scope between security authorities (e.g. container/guest escape to host, crossing VM or user-namespace boundary per CVSS definition). Do not choose S:C merely because the kernel is involved or because other processes exist on the system; many local kernel bugs remain S:U.
+                    - CIA: Set each based on realistic consequences: use A for availability-only DoS; use C/I when plausible user-visible confidentiality or integrity impact exists. For internal kernel object lifetime/corruption with no direct user data read/write, prefer C:N/I:N or low scores unless a credible path to disclosure or controlled modification of user data is described.
+                    - Linux networking internals (tc, qdisc, net_sched, classifiers, queue discipline): flaws confined to internal queue/scheduling/state or buffer accounting for traffic shaping usually do not read or forge application payload data. Prefer C:N and I:N unless the advisory describes a concrete cross-boundary or user-data effect (e.g. leaking packet contents or socket buffers to userspace, forging another user's traffic, container-to-host data leak). Do not set C:H or I:H from generic "memory corruption" or "undefined behavior" alone; if you output C:H or I:H, the explanation must spell out that user-data impact path in one sentence.
+                - Consider Red Hat hardening defaults (SELinux enforcing, least privilege) only to inform AC and S, not AV.
+                - After calling osidb_flaw_tool, you MUST pass the flaw's reference URLs to external_references_tool to retrieve upstream CVSS vectors, security advisories, and commit details. This is critical for accurate scoring.
+                - Use github mcp and web search tools for additional context if needed.
+                - If cisa_kev_tool is available, check for known exploits.
+                - Data quality:
+                    - Set data_quality to reflect how much actionable technical detail the input (comment_zero / CVE description) provides for CVSS scoring.
+                    - Reserve 0.9–1.0 only when the input spells out attack vector, privileges, user interaction, scope, and concrete CIA consequences.
+                    - Use 0.6–0.8 when the input gives a general idea of the flaw but omits some metrics-relevant detail (e.g., no exploitation path, unclear privilege requirements).
+                    - Use 0.3–0.5 when the input is vague, merely names a vulnerability class, or lacks technical context.
+                    - Use below 0.3 when the input is essentially empty or uninformative.
+                - Confidence:
+                    - Set confidence to reflect how reliable the overall suggestion is. Be conservative.
+                    - Reserve 0.9–1.0 only when input data is unambiguous and you are near-certain about the vector, score, and impact.
+                    - Use 0.6–0.8 when most metrics are clear but one or two require assumptions (e.g., unclear scope or privilege level).
+                    - Use 0.3–0.5 when significant guesswork is involved due to sparse or ambiguous input.
+                    - Use below 0.3 when the suggestion is largely speculative.
+                - Mozilla/Firefox/Thunderbird CVEs with sparse input (e.g. "Undefined behavior in X component"):
+                    - The comment_zero is often just one generic sentence. Use external_references_tool to fetch the Mozilla security advisory — it contains an explicit impact label per CVE.
+                    - Map Mozilla's impact labels to Red Hat severity: critical → Critical, high → Important, moderate → Moderate, low → Low.
+                    - When the comment_zero is vague and Mozilla's advisory provides an impact label, treat that label as the primary impact signal and construct a CVSS vector whose score falls within the matching band (Critical > 9.0, Important 7.1–9.0, Moderate 4.0–7.0, Low 0.1–3.9). This ensures the impact is not overridden by post-processing reconciliation.
+                    - For these sparse-input CVEs, set data_quality to 0.3–0.5 and confidence to 0.3–0.5 to reflect the limited technical detail available.
+                - Explanation must match the vector (mandatory):
+                    - Do not write that exploitation requires admin capabilities, mount privileges, or privileged syscalls and output PR:L; use PR:H when those are required to trigger the flaw.
+                    - If you revise the narrative and it implies stricter privileges than your draft vector, update PR in the vector before finalizing.
+                - Output
+                    - Provide the vector and score first, then impact, then a concise explanation with metric-by-metric rationale.
+                    - Keep explanations concise.
+            """
+
+    def _check_output(self, result, deps) -> str | None:
+        return check_kernel_output(result.output, deps)
+
     @staticmethod
-    def post_process_impact(output, call_str):
-        # read the suggested cvss3_score (possibly already updated by post_process_cvss)
+    def reconcile_severity(output, call_str, classifier_result=None) -> str:
+        """Bidirectional severity reconciliation.
+
+        Dispatches to one of two paths:
+
+        **Kernel path** (classifier_result present): threshold-based
+        reconciliation ported from al-kernel.  The classifier's
+        cascade-adjusted prediction is the starting severity; the LLM's
+        own CVSS score drives deterministic threshold rules (H1–H11).
+
+        **Non-kernel path** (no classifier): LLM self-consistency check.
+        If the LLM's stated impact matches its CVSS band, keep it.  If
+        they disagree, trust the CVSS band (quantitative > qualitative).
+        In both cases, CRITICAL is capped to IMPORTANT unless the
+        CVSS vector objectively supports it (AV:N/AC:L/PR:N/UI:N
+        with at least two of C:H, I:H, A:H).
+
+        The kernel path additionally applies specific guardrails
+        (G2–G5) based on classifier-provided feature flags (memory
+        corruption, network exposure, contained subsystems, etc.).
+
+        Returns a trace string explaining the decision.
+        """
+        if classifier_result and isinstance(classifier_result, dict):
+            return reconcile_kernel(output, call_str, classifier_result)
+
+        # --- Non-kernel path: LLM self-consistency ---
+        SEV = SEVERITY_ORDER
+
         try:
-            cvss3_score = float(output.cvss3_score)
-        except ValueError:
-            cvss3_score = float("nan")
+            llm_cvss = float(output.cvss3_score)
+        except (ValueError, TypeError):
+            llm_cvss = float("nan")
 
-        # check which impact corresponds to cvss3_score
-        if 9.0 < cvss3_score:
-            impact_by_cvss3 = "CRITICAL"
-        elif 7.0 < cvss3_score:
-            impact_by_cvss3 = "IMPORTANT"
-        elif 4.0 < cvss3_score:
-            impact_by_cvss3 = "MODERATE"
-        elif 0.0 < cvss3_score:
-            impact_by_cvss3 = "LOW"
-        elif 0.0 == cvss3_score:
-            impact_by_cvss3 = ""
-        else:
-            logger.warning(f"{call_str}: invalid cvss3_score: {cvss3_score}")
-            return
+        llm_cvss_band = score_to_band(llm_cvss)
+        llm_impact = (output.impact or "").strip().upper()
 
-        # compare with the suggested impact
-        impact = output.impact
-        if impact == impact_by_cvss3:
-            return
+        if not llm_cvss_band or llm_cvss_band not in SEV:
+            return ""
+        if llm_impact not in SEV:
+            return ""
 
-        logger.info(
-            f"{call_str}: adjusting impact to match cvss3_score: {impact} -> {impact_by_cvss3}"
+        if llm_impact == llm_cvss_band:
+            trace = (
+                f"path=non_kernel; llm_cvss={llm_cvss:.1f}; "
+                f"band={llm_cvss_band}; stated={llm_impact}; "
+                f"consistent=true; result={llm_impact}"
+            )
+            logger.info(
+                "%s: reconciliation confirmed %s (%s)",
+                call_str,
+                llm_impact,
+                trace,
+            )
+            return trace
+
+        final = llm_cvss_band
+        trace = (
+            f"path=non_kernel; llm_cvss={llm_cvss:.1f}; "
+            f"band={llm_cvss_band}; stated={llm_impact}; "
+            f"consistent=false; result={final}"
         )
-        output.impact = impact_by_cvss3
+        logger.info(
+            "%s: reconciled %s -> %s (%s)",
+            call_str,
+            output.impact,
+            final,
+            trace,
+        )
+        output.impact = final
+        return trace
+
+    _BAND_SCORE_FLOOR: dict[str, float] = {
+        "CRITICAL": 9.1,
+        "IMPORTANT": 7.1,
+        "MODERATE": 4.0,
+        "LOW": 0.1,
+    }
 
     @staticmethod
-    def post_process(output, call_str):
+    def align_score_to_impact(output, call_str) -> None:
+        """Bump CVSS score to the band floor when reconciliation moved
+        impact above the score's natural band.
+
+        Only called when reconciliation actually changed the impact, so
+        LLM-originated mismatches that reconciliation left alone are not
+        touched here.
+        """
+        try:
+            score = float(output.cvss3_score)
+        except (ValueError, TypeError):
+            return
+
+        band = score_to_band(score)
+        if band is None or band == output.impact:
+            return
+
+        sev = SEVERITY_ORDER
+        impact_rank = sev.get(output.impact, 99)
+        band_rank = sev.get(band, 99)
+
+        if impact_rank < band_rank:
+            floor = SuggestImpact._BAND_SCORE_FLOOR.get(output.impact)
+            if floor is not None:
+                logger.info(
+                    "%s: bumping cvss3_score %.1f -> %.1f to align with "
+                    "reconciled impact %s (was band %s)",
+                    call_str,
+                    score,
+                    floor,
+                    output.impact,
+                    band,
+                )
+                output.cvss3_score = f"{floor}"
+
+    @staticmethod
+    def post_process(output, call_str, classifier_result=None):
         SuggestImpact.post_process_cvss(output, call_str)
-        SuggestImpact.post_process_impact(output, call_str)
+        pre_reconcile_impact = output.impact
+        trace = SuggestImpact.reconcile_severity(
+            output, call_str, classifier_result=classifier_result
+        )
+
+        override_trace = apply_kpanic_cvss_override(output, call_str, classifier_result)
+        if override_trace:
+            trace = f"{trace}; {override_trace}"
+        elif output.impact != pre_reconcile_impact:
+            SuggestImpact.align_score_to_impact(output, call_str)
+
+        return trace
+
+    _CVSS_METRICS = ("AV", "AC", "PR", "UI", "S", "C", "I", "A")
+
+    @staticmethod
+    def _diff_vector_metrics(
+        old_vector: str, new_vector: str
+    ) -> tuple[list[str], list[str]]:
+        """Compare two CVSS 3.1 vectors and return (changed, unchanged)
+        metric descriptions.
+
+        Returns two lists:
+          changed  – e.g. ["AC changed from L to H", "S changed from C to U"]
+          unchanged – e.g. ["AV", "PR", "UI", "C", "I"]
+        """
+        old = cvss.CVSS3(old_vector).original_metrics or {}
+        new = cvss.CVSS3(new_vector).original_metrics or {}
+        changed: list[str] = []
+        unchanged: list[str] = []
+        for m in SuggestImpact._CVSS_METRICS:
+            ov, nv = old.get(m), new.get(m)
+            if ov != nv and ov is not None and nv is not None:
+                changed.append(f"{m} changed from {ov} to {nv}")
+            else:
+                unchanged.append(m)
+        return changed, unchanged
+
+    async def _revise_explanation(
+        self,
+        result,
+        original_score,
+        original_impact,
+        original_vector,
+        trace,
+        call_str,
+        *,
+        cve_context: dict | None = None,
+    ):
+        """Ask the LLM to revise its explanation after post-processing
+        changed the score, impact, or CVSS vector.  Best-effort: failures
+        are logged and the original explanation is kept.
+
+        Returns True if the revision succeeded, False otherwise."""
+        from aegis_ai.features import llm_prompt_timeout, llm_sem
+
+        changes: list[str] = []
+        if result.output.impact != original_impact:
+            changes.append(f"impact: {original_impact} -> {result.output.impact}")
+        if result.output.cvss3_score != original_score:
+            changes.append(
+                f"cvss3_score: {original_score} -> {result.output.cvss3_score}"
+            )
+
+        metric_changed: list[str] = []
+        metric_unchanged: list[str] = []
+        new_vector = result.output.cvss3_vector or ""
+        if new_vector != original_vector:
+            metric_changed, metric_unchanged = self._diff_vector_metrics(
+                original_vector, new_vector
+            )
+            changes.extend(metric_changed)
+
+        metric_instructions = ""
+        if metric_changed:
+            metric_instructions = (
+                f"\n\nMetrics that changed: {', '.join(metric_changed)}. "
+                "Update ONLY the justifications for these metrics."
+            )
+            if metric_unchanged:
+                metric_instructions += (
+                    f"\nDo NOT modify the justifications for: "
+                    f"{', '.join(metric_unchanged)}."
+                )
+
+        # Build a concise CVE context block so the revision LLM can write
+        # technically accurate justifications without the full conversation.
+        context_block = ""
+        if cve_context:
+            title = cve_context.get("title", "")
+            description_text = (
+                cve_context.get("cve_description")
+                or cve_context.get("comment_zero")
+                or cve_context.get("description", "")
+            )
+            components = cve_context.get("components", [])
+            parts: list[str] = []
+            if title:
+                parts.append(f"Title: {title}")
+            if components:
+                parts.append(f"Components: {', '.join(components)}")
+            if description_text:
+                parts.append(f"Description: {description_text}")
+            if parts:
+                context_block = "CVE context:\n" + "\n".join(parts) + "\n\n"
+
+        follow_up = (
+            f"{context_block}"
+            "Post-processing has adjusted your assessment.\n"
+            f"Changes: {'; '.join(changes)}\n"
+            f"Reconciliation trace: {trace}\n"
+            f"{metric_instructions}\n\n"
+            "Revise your explanation so the rationale is consistent with "
+            "the updated score and impact.  Rewrite the affected sentences "
+            "in place — do NOT append a note, disclaimer, or separate "
+            "paragraph about the override.  The result must read as a "
+            "single coherent explanation.  Keep the same structure and "
+            "level of detail.  Return only the revised explanation text."
+        )
+
+        override_note = ""
+        new_vector = result.output.cvss3_vector or ""
+        if new_vector != original_vector or result.output.cvss3_score != original_score:
+            override_note = (
+                f"\n\nNote: CVSS vector adjusted from "
+                f"{original_score} ({original_vector}) to "
+                f"{result.output.cvss3_score} ({new_vector})"
+                f" during post-processing reconciliation."
+            )
+
+        _REVISION_TIMEOUT = llm_prompt_timeout
+
+        try:
+            revision_prompt = (
+                f"Original explanation:\n{result.output.explanation}\n\n{follow_up}"
+            )
+            async with llm_sem:
+                revision = await asyncio.wait_for(
+                    self._run(
+                        call_str,
+                        revision_prompt,
+                        output_type=RevisedExplanationModel,
+                    ),
+                    timeout=_REVISION_TIMEOUT,
+                )
+            result.output.explanation = revision.output.explanation + override_note
+            logger.info(
+                "%s: explanation revised after post-processing adjustments", call_str
+            )
+            return True
+        except asyncio.TimeoutError:
+            logger.warning(
+                "%s: revision timed out after %ds, keeping original explanation",
+                call_str,
+                _REVISION_TIMEOUT,
+            )
+            if override_note:
+                result.output.explanation += override_note
+            return False
+        except Exception as exc:
+            logger.warning(
+                "%s: failed to revise explanation after post-processing: %s",
+                call_str,
+                exc,
+            )
+            if override_note:
+                result.output.explanation += override_note
+            return False
 
     async def exec(self, cve_id: CVEID, static_context: Any = None):
-        deps = feature_deps(exclude_osidb_fields=["impact", "rh_cvss_score"])
+        use_kernel_classifier = get_settings().use_kernel_classifier
+
+        use_static = (
+            static_context
+            and isinstance(static_context, dict)
+            and static_context.get("cvss_scores") is not None
+        )
+        resolved_static_context = static_context if use_static else None
+        is_kernel = False
+
+        if use_kernel_classifier:
+            components = []
+            if isinstance(static_context, dict):
+                components = static_context.get("components") or []
+
+            if not components:
+                cve_data = await osidb_tool.cve_retrieve(cve_id)
+                components = cve_data.components
+                resolved_static_context = cve_data.model_dump()
+                use_static = True
+
+            is_kernel = is_kernel_component(components)
+
+        # Eagerly run the kernel classifier so the result is available on
+        # deps for both the tool fast-path and post-processing (reconciliation,
+        # guardrails).  kernel_impact_tool will return this cached result
+        # instantly when the LLM calls it.
+        if use_kernel_classifier and is_kernel:
+            from aegis_ai.toolsets.tools.kernel_classifier import kernel_impact_classify
+
+            pre_clf = await kernel_impact_classify(
+                cve_id, static_context=resolved_static_context
+            )
+        else:
+            pre_clf = None
+
+        deps = feature_deps(
+            exclude_osidb_fields=["impact", "rh_cvss_score"],
+            static_context=resolved_static_context if use_static else None,
+            is_kernel_cve=is_kernel,
+        )
+        if pre_clf is not None:
+            deps.classifier_result = pre_clf
+
+        output_schema = SuggestImpactModel.model_json_schema()
+        if not is_kernel:
+            output_schema.get("properties", {}).pop(
+                "classifier_disagreement_rationale", None
+            )
+
         prompt = AegisPrompt(
-            user_instruction="Analyze the CVE JSON and derive a CVSS v3.1 base vector and score with metric-by-metric rationale from the perspective of Red Hat customers. Based on the score, select the impact (LOW/MODERATE/IMPORTANT/CRITICAL). Ignore any pre-labeled impact/CVSS and decide independently.",
+            user_instruction="Analyze the CVE JSON and derive a CVSS v3.1 base vector and score with metric-by-metric rationale from the perspective of Red Hat customers. Based on the score, select the impact (LOW/MODERATE/IMPORTANT/CRITICAL).",
             goals="""
                 - Return exactly one CVSS:3.1 base vector and score consistent with each other.
                 - Provide short reasoning for each base metric (AV, AC, PR, UI, S, C, I, A).
@@ -98,41 +466,63 @@ class SuggestImpact(Feature):
                 - Do not base metric choices on which RH products are affected; reason from technical preconditions and exploit mechanics.
                 - Pick impact (Critical/Important/Moderate/Low) from the computed score.
             """,
-            rules="""
-                - Output format (must follow exactly):
-                    - cvss3_vector: "CVSS:3.1/AV:X/AC:X/PR:X/UI:X/S:X/C:X/I:X/A:X"
-                      where AV in [N,A,L,P], AC in [L,H], PR in [N,L,H], UI in [N,R], S in [U,C], C/I/A in [N,L,H].
-                    - cvss3_score: numeric string matching the vector (we will verify and adjust if needed).
-                    - impact: Critical/Important/Moderate/Low based on the score.
-                - Metric selection guide:
-                    - AV: N if reachable over network from off-host; A if same subnet/Bluetooth/802.11 link-limited; L if requires local account/session/CLI/local IPC; P if requires physical access.
-                    - AC: H if requires uncommon configuration, precise timing/race, multiple conditions, or lengthy preparation; else L.
-                    - PR: N if no prior auth; L if basic/local user privileges are enough; H if admin/root/high-privileges are required to trigger.
-                    - UI: R if victim must click/open/provide content; else N.
-                    - S: C if exploitation crosses a trust boundary (e.g., container escape, VM escape, kernel boundary affecting other contexts); else U.
-                    - CIA: Set each based on consequences described: use A for availability-only DoS; use C/I when data disclosure/modification or code execution with escalated privileges is plausible.
-                - Consider Red Hat hardening defaults (SELinux enforcing, least privilege) only to inform AC and S, not AV.
-                - Retrieve and summarize additional context from vulnerability references:
-                    - Use github mcp and web search tools to resolve reference URLs.
-                    - Always use kernel_cve tool if the component is the Linux kernel.
-                    - If cisa_kev_tool is available, check for known exploits.
-                - Confidence:
-                    - Calibrate confidence to the fraction of base metrics you are ≥80% sure about (e.g., 0.75 if 6/8 are certain).
-                - Output
-                    - Provide the vector and score first, then impact, then a concise explanation with metric-by-metric rationale.
-                    - Keep explanations concise.
-            """,
+            rules=RULES_KERNEL if is_kernel else self._RULES_BASE,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=remove_keys(
-                static_context, keys_to_remove=deps.exclude_osidb_fields
-            ),
-            output_schema=SuggestImpactModel.model_json_schema(),
+            output_schema=output_schema,
         )
-        result = await self.run_if_safe(
-            prompt, deps=deps, output_type=SuggestImpactModel
-        )
+
+        run_kwargs: dict = dict(deps=deps, output_type=SuggestImpactModel)
+
+        if is_kernel:
+            from aegis_ai.toolsets import kernel_extra_toolset
+
+            run_kwargs["toolsets"] = [kernel_extra_toolset]
+
+        result = await self.guarded_run(prompt, **run_kwargs)
         call_str = f"{self.__class__.__name__}({cve_id})"
-        SuggestImpact.post_process(result.output, call_str)
+        classifier_result = deps.classifier_result
+
+        original_score = result.output.cvss3_score
+        original_vector = result.output.cvss3_vector or ""
+        original_impact = result.output.impact
+
+        result.output._original_llm_impact = original_impact
+        result.output._original_llm_score = original_score
+        result.output._original_llm_vector = original_vector
+
+        trace = SuggestImpact.post_process(
+            result.output,
+            call_str,
+            classifier_result=classifier_result,
+        )
+
+        impact_changed = result.output.impact != original_impact
+        vector_changed = result.output.cvss3_vector != original_vector
+        guardrail_fired = classifier_result is not None and (
+            impact_changed or vector_changed
+        )
+        if guardrail_fired:
+            result.output._explanation_revised = await self._revise_explanation(
+                result,
+                original_score,
+                original_impact,
+                original_vector,
+                trace,
+                call_str,
+                cve_context=resolved_static_context,
+            )
+
+        result.output._classifier_diagnostics = classifier_result
+        result.output._reconciliation_trace = trace
+
+        # Map classifier feature flags to OSIDB label names so the bot
+        # can create FlawLabel records (e.g. "kpanic") after saving the flaw.
+        if classifier_result and isinstance(classifier_result, dict):
+            active = classifier_result.get("active_features", [])
+            result.output._flags = sorted(
+                set(_FLAG_TO_LABEL[f] for f in active if f in _FLAG_TO_LABEL)
+            )
+
         return result
 
 
@@ -140,18 +530,23 @@ class SuggestCWE(Feature):
     """Based on current CVE information and context assert CWE(s)."""
 
     async def exec(self, cve_id: CVEID, static_context: Any = None):
-        deps = feature_deps(exclude_osidb_fields=["cwe_id"])
+        deps = feature_deps(
+            exclude_osidb_fields=["cwe_id"],
+            static_context=static_context,
+        )
+
         prompt = AegisPrompt(
-            user_instruction="From the CVE JSON, identify the most specific CWE that matches the root cause of software weakness. Ignore any pre-labeled CWE.",
+            user_instruction="From the CVE JSON, identify the most specific CWE that matches the directly exploitable software weakness. Ignore any pre-labeled CWE.",
             goals="""
                 - Prefer the most specific CWE over broad parents.
+                - Prefer the directly observable/exploitable weakness over abstract root causes. For example, if a missing return-value check leads to a NULL pointer dereference, prefer CWE-476 (NULL Pointer Dereference) over CWE-252 (Unchecked Return Value).
                 - Return a short explanation and confidence.
             """,
             rules="""
-                - When CVE component is kernel always use kernel_cve tool to retrieve additional context.
                 - Retrieve and summarise additional context strictly from vulnerability reference URLs and CWE tool outputs.
                     - Prefer mitre_cwe tools (retrieve_allowed_cwe_ids, search_cwes, retrieve_cwes) for CWE selection and definitions.
                     - Use github mcp tool to resolve vulnerability reference URLs if present.
+                    - Do NOT call external_references_tool — it returns bulk content that is not needed for CWE classification.
                     - Avoid using general-purpose web search or encyclopedic tools for CWE selection unless references are insufficient.
                 - Identify set of candidate CWEs - always use the mitre cwe tool retrieve_allowed_cwe_ids to filter candidate CWE list.
                     - Analyze vulnerability, identify CWE that matches root cause of weakness, being careful about memory management and buffer overflows.
@@ -165,12 +560,11 @@ class SuggestCWE(Feature):
                 - confidence: [0.00..1.00].
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=remove_keys(
-                static_context, keys_to_remove=deps.exclude_osidb_fields
-            ),
             output_schema=SuggestCWEModel.model_json_schema(),
         )
-        result = await self.run_if_safe(prompt, deps=deps, output_type=SuggestCWEModel)
+
+        run_kwargs: dict = dict(deps=deps, output_type=SuggestCWEModel)
+        result = await self.guarded_run(prompt, **run_kwargs)
         # Post-process: filter out any disallowed CWE IDs (guardrail in case LLM misses rules)
         await cwe_manager.initialize()
         allowed_cwe_ids = set(cwe_manager.get_allowed_cwe_ids())
@@ -210,43 +604,50 @@ class IdentifyPII(Feature):
                 Only report PII present in the JSON. Do not add extra text or line breaks like \n inside items.
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=static_context,
             output_schema=PIIReportModel.model_json_schema(),
         )
-        return await self.run_if_safe(prompt, deps=deps, output_type=PIIReportModel)
+        return await self.guarded_run(prompt, deps=deps, output_type=PIIReportModel)
 
 
 class SuggestDescriptionText(Feature):
     """Based on current CVE information and context suggest a description and title."""
 
     async def exec(self, cve_id: CVEID, static_context: Any = None):
-        deps = feature_deps(exclude_osidb_fields=["title", "cve_description"])
+        deps = feature_deps(
+            exclude_osidb_fields=["title", "cve_description"],
+            static_context=static_context,
+        )
         prompt = AegisPrompt(
             user_instruction="Analyze the CVE JSON and suggest the CVE description and title to be brief, clear, and accurate. If missing, propose them. Write for a non-technical/executive audience (e.g., a CISO) using plain English; avoid jargon and define unavoidable terms briefly.",
             goals="""
                 - Provide a concise description and a short title.
                 - Include confidence and quality scores.
                 - The description should be 2–5 sentences and easy to read.
-                - The title should briefly summarize the core impact and trigger in one line.
+                - The title should briefly summarize the core issue in one line; keep headline-level detail only (do not mirror the full description).
             """,
             rules="""
+                - After calling osidb_flaw_tool, pass the flaw's reference URLs to external_references_tool to retrieve additional context about the vulnerability from upstream advisories.
                 'description': one short paragraph.
                 - Begin with: "A flaw was found in <component>."
                 - Clearly state: who can exploit the flaw (e.g., a remote attacker, a local user, a malicious server), how it can be exploited (method/conditions), and the concrete consequences.
-                - Include the vulnerability type when clear (use CWE category when obvious), the affected component, the trigger/cause, and the primary impact.
+                - Include the vulnerability type when clear, the affected component, the trigger/cause, and the primary impact.
                 - Highlight the most important consequence first. Prefer domain phrases such as "arbitrary code execution", "privilege escalation", "information disclosure", or "Denial of Service (DoS)".
                 - Use plain English; avoid deep implementation jargon. If a function or symbol name is central to exploitation, you may mention a single example and explain it briefly.
                 - If a term or acronym is needed, briefly define it and expand the acronym in parentheses on first use.
-                - Do not include product/version lists, package names, or mitigation/update guidance.
+                - Do not include product/version lists, package names, or mitigation/update guidance. Never copy version numbers or version ranges from the CVE input (e.g., "2.442 through 2.554", "prior to 0.5.6") into the description — describe the flaw generically.
+                - Do not mention exploit availability or public disclosure status (e.g., "The exploit has been publicly disclosed").
                 - Avoid generic CIA boilerplate; name the concrete impact (e.g., data disclosure, code execution, denial of service).
+                - When upstream or reference text in the CVE is well written, prefer clarity and professional advisory tone over adding redundant phrasing.
                 - Ambiguity and uncertainty:
                   - Do NOT invent a specific component, function, trigger, CWE, or impact if the source data and references do not clearly support it.
                   - If a single component or trigger cannot be reliably identified, use neutral wording (e.g., "in the affected component") and describe the mechanism at a high level.
                   - Prefer calibrated phrasing when evidence is weak (e.g., "may allow", "can enable") rather than asserting specifics.
-                  - Only include a CWE category or precise impact (e.g., "arbitrary code execution", "privilege escalation") when it is well-supported; otherwise, use a generic but accurate type (e.g., "input validation vulnerability", "memory corruption vulnerability") or simply "vulnerability".
+                  - Never mention CWE identifiers or CWE category names (e.g., "CWE-79", "CWE-835", "Loop with Unreachable Exit Condition") in the description — CWE classification is handled separately.
+                  - Only include a precise impact (e.g., "arbitrary code execution", "privilege escalation") when it is well-supported; otherwise, use a generic but accurate type (e.g., "input validation vulnerability", "memory corruption vulnerability") or simply "vulnerability".
                 'title': <= 20 words, summarize the description; include product/component and vulnerability type or consequence.
                 - Style: "<Component>: <primary consequence> via <trigger/cause>" when applicable.
-                - The title may include a specific function or primitive if it is the salient trigger; avoid extraneous implementation details.
+                - Prefer one primary consequence in the title (the worst plausible or the one the advisory emphasizes). Avoid stacking multiple unrelated impact types (e.g. several "and" clauses for different CIA outcomes); use one umbrella phrase in the title and put nuance in the description.
+                - The title may include a specific function or primitive if it is the salient trigger; avoid extraneous implementation details and avoid stuffing multiple impact dimensions into the title—those belong in the description.
                 - If the trigger is unclear, omit the "via <trigger/cause>" clause. If the component is unclear, name the project/product or keep a consequence-first title without fabricating specifics.
                 - Strictly exclude versions: never include any version numbers or ranges (e.g., "5.0.0", "v2", "2.x", "9.x and earlier") in the title.
                 - Keep it focused and professional.
@@ -254,12 +655,9 @@ class SuggestDescriptionText(Feature):
                 - Never output meta-diagnostic text such as "information is inconsistent", "insufficient data", "cannot determine", or similar. Provide the best-supported description instead with calibrated confidence.
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=remove_keys(
-                static_context, keys_to_remove=deps.exclude_osidb_fields
-            ),
             output_schema=SuggestDescriptionModel.model_json_schema(),
         )
-        return await self.run_if_safe(
+        return await self.guarded_run(
             prompt, deps=deps, output_type=SuggestDescriptionModel
         )
 
@@ -268,7 +666,10 @@ class SuggestStatementText(Feature):
     """Based on current CVE information and context suggest a statement and mitigation."""
 
     async def exec(self, cve_id: CVEID, static_context: Any = None):
-        deps = feature_deps(exclude_osidb_fields=["statement", "mitigation"])
+        deps = feature_deps(
+            exclude_osidb_fields=["statement", "mitigation"],
+            static_context=static_context,
+        )
         NO_MITIGATION_TEXT = (
             "Mitigation for this issue is either not available or the currently available "
             "options do not meet the Red Hat Product Security criteria comprising ease of use and deployment, "
@@ -284,19 +685,24 @@ class SuggestStatementText(Feature):
             - Keep outputs concise and consistent; avoid contradiction between fields.
             """,
             rules=f"""
+            - After calling osidb_flaw_tool, pass the flaw's reference URLs to external_references_tool to retrieve detailed impact context from upstream advisories and GHSAs.
             ### STATEMENT (suggested_statement)
             - Focus on impact and RH relevance (deployment model, defaults, hardening).
             - Start with a concise severity-and-why sentence tailored for Red Hat that is consistent with the provided 'impact' field if available:
               - If 'impact' is present in context, reuse that label but in Title Case (Low/Moderate/Important/Critical) and do not contradict it.
               - If 'impact' is not present, avoid assigning an explicit severity label; describe impact qualitatively instead.
+            - Add value beyond the CVE description and public comments: explain *why* that severity label fits the risk (e.g., why Important rather than Moderate), not a restatement of comment #0 alone.
+            - When you include an explicit severity label (Low/Moderate/Important/Critical), add at least one short clause that justifies that band (e.g. local-only vs remote, prerequisites, blast radius, or why not the next lower severity)—not only a description of the bug mechanics.
+            - Differentiate from the CVE description: lead with Red Hat deployment context (defaults, exposure on typical installs) where possible; do not reuse the same sentence structure or chain of nouns as cve_description (reorder ideas and change phrasing so the statement is not a light paraphrase).
             - Explain briefly why impact applies (e.g., feature disabled by default, needs uncommon configuration, requires physical access, short-lived CLI use).
-            - Explicitly note scope and applicability:
-              - Call out affected/unaffected Red Hat product versions when the rationale depends on defaults (e.g., feature disabled by default on RHEL 8/9).
-              - If the vulnerability requires a feature that is disabled by default on common RH releases, state those releases are not affected and why.
+            - Applicability without duplicating the advisory "Affects" list:
+              - Do not paste product/version matrices; readers can see those elsewhere. At most one short clause when defaults or preconditions are essential (e.g., "disabled by default on RHEL 8 and 9").
+              - If the vulnerability requires a feature that is disabled by default on common RH releases, say so briefly; avoid enumerating every unaffected release unless a single contrast is needed.
               - If exploit requires physical access or specialized hardware, highlight that requirement; mention if virtualized/emulated devices could still enable exploitation.
-            - When applicable, note preconditions and what is not affected (e.g., versions, roles, disabled-by-default features).
+            - When applicable, note preconditions and what is not affected (e.g., roles, disabled-by-default features) without turning the statement into a component version manifest.
             - Must NOT:
               - Duplicate the CVE description verbatim or copy any sentence or 7+ consecutive words from it; paraphrase and focus on RH-specific context.
+              - Lead with or emphasize upstream component version strings (e.g., "Foo 1.2.3"); severity narrative comes first.
               - Include code-level details or command examples.
               - Mention mitigation steps or software updates/patching.
             - Style: 2–4 concise sentences, < 1000 characters total.
@@ -331,12 +737,9 @@ class SuggestStatementText(Feature):
             - Length: < 2000 characters.
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=remove_keys(
-                static_context, keys_to_remove=deps.exclude_osidb_fields
-            ),
             output_schema=SuggestStatementModel.model_json_schema(),
         )
-        return await self.run_if_safe(
+        return await self.guarded_run(
             prompt, deps=deps, output_type=SuggestStatementModel
         )
 
@@ -359,7 +762,7 @@ class SuggestAffectedComponents(Feature):
     async def exec(self, cve_id: CVEID, static_context: Any = None):
         use_static = _has_sufficient_static_context(static_context)
         deps = feature_deps(
-            exclude_osidb_fields=["components"],
+            exclude_osidb_fields=["affects", "components"],
             static_context=static_context if use_static else None,
         )
         prompt = AegisPrompt(
@@ -368,26 +771,37 @@ class SuggestAffectedComponents(Feature):
             goals="""
                 - From all available CVE/OSIDB data (title, comment_zero, description, statement, mitigation, comments, references, affects, cvss_scores, cwe_id, impact), identify the affected software component(s).
                 - List component names (package names) in the output 'components' field.
-                - Where a Package URL (PURL) is identified use the name part of the PURL. For maven or golang types include the namespace in the component name but no PURL protocol or type.
+                - Where a Package URL (PURL) is identified use the name part of the PURL, without any namespace or type prefix. Exception: for Maven packages, always include the groupId and use groupId/artifactId format with a forward slash separator (e.g. 'com.mchange/mchange-commons-java' not 'mchange-commons-java', 'org.traccar/traccar' not 'org.traccar:traccar', 'org.apache.sshd/sshd-core' not just 'sshd-core'). Similarly, for PHP Composer packages, always include the vendor and use vendor/package format (e.g. 'phpseclib/phpseclib' not 'phpseclib').
+                - Never prefix component names with ecosystem identifiers: no 'python-', 'nodejs-', or 'rubygem-' prefixes. Use the bare package name (e.g. 'cryptography' not 'python-cryptography', 'dotenv' not 'python-dotenv', 'axios' not 'nodejs-axios', 'rack' not 'rubygem-rack'). Strip the prefix even when the upstream project name includes it (e.g. PyPI package 'python-dotenv' → 'dotenv'). Only strip the exact prefixes listed above — 'node-' is NOT an ecosystem prefix (e.g. npm package 'node-forge' → 'node-forge', not 'forge'). Exception: keep the 'rust-' prefix — it is a Red Hat distro naming convention, not an ecosystem prefix (e.g. 'rust-openssl', 'rust-coreutils').
+                - For Go packages outside stdlib, always use the full module path as the component name. This applies to github.com/ packages (e.g. 'github.com/containerd/containerd' not 'containerd', 'github.com/go-acme/lego' not 'lego') and golang.org/x/ packages (e.g. 'golang.org/x/net/html' not 'net/html', 'golang.org/x/oauth2/jws' not 'oauth2/jws'). Strip Go major-version suffixes (/v2, /v3, /v7, etc.) from the module path (e.g. 'github.com/oauth2-proxy/oauth2-proxy' not 'github.com/oauth2-proxy/oauth2-proxy/v7').
                 - If the component is from the Python standard library, use 'python' as the component name.
-                - If the component is from the Go ecosystem and not in the standard library, include the namespace (e.g. github.com/containerd/containerd).
-                - If the component is from the Go standard library, use a specific package name and return it first in the components array in addition to the component 'golang'.
+                - If the component is from the Go standard library, keep the full stdlib path (e.g. 'crypto/internal/nistec', 'crypto/x509', 'cmd/go', 'net/http/internal') and return it first in the components array in addition to the component 'golang'.
+                - Use Red Hat distribution package names, not upstream project or product names. Examples: Linux kernel → 'kernel', Google Chrome/Chromium (including sub-components like V8, Blink, ANGLE, PDFium, Skia, DevTools, WebGL, WebML, Compositing) → 'chromium-browser', MySQL Server → 'mysql', uutils/coreutils → 'rust-coreutils', OpenSSL Rust bindings → 'rust-openssl', Mbed TLS → 'mbedtls', PowerDNS Recursor → 'pdns-recursor', Roundcube Webmail → 'roundcubemail', OpenPrinting CUPS → 'cups', .NET Framework → 'dotnet', GLib/GLib2 → 'glib', `XML::Parser` → 'perl-xml-parser'. Exception: for Go packages in the golang ecosystem, the full module path (see above) takes precedence over the Red Hat distro name.
+                - Use the source component name, not binary or subpackage names. Examples: Redis → 'redis' not 'redis-server', Apache HTTP Server → 'httpd' not 'httpd-core'.
+                - When the CVE title or GitHub repository name differs from the actual package name in the ecosystem registry (npm, PyPI, crates.io, etc.), always use the registry name (e.g. GitHub repo 'node-tar' is published to npm as 'tar' → use 'tar'; GitHub repo 'forge' is published to npm as 'node-forge' → use 'node-forge'; GitHub repo 'tar-rs' is published to crates.io as 'tar' → use 'tar').
+                - For proprietary OS kernel vulnerabilities (macOS, iOS, Windows, etc.), use the OS name as the component (e.g. 'macOS', 'iOS', 'Windows'), not 'kernel'. Only use 'kernel' for the Linux kernel.
+                - When a vulnerability is in a product's own code (e.g. its shared certificate validation logic), list only the product itself as the affected component. Do not list services, protocols, or features that the product merely uses or integrates (e.g. RouterOS using OpenVPN/CAPsMAN/Dot1x → 'RouterOS' only).
+                - Use the bare package/project name, not a descriptive label from the CVE title. Examples: 'musl' not 'musl libc', 'glibc' not 'GNU C Library', 'openssl' not 'OpenSSL library'. This rule is about dropping informal suffixes like 'libc' or 'library' — it does NOT override the ecosystem prefix-stripping rules above (e.g. 'python-dotenv' → 'dotenv' still applies).
+                - Determine which package ecosystem(s) are impacted by the vulnerability. Many components are published to multiple ecosystems (e.g. Redis has pypi, npm, upstream); the vulnerability may only affect one. Populate the 'ecosystems' field with one or more of: cargo, golang, npm, pypi, maven, gem, upstream, unknown.
                 - Provide a concise explanation of the rationale.
             """,
             rules="""
                 - Use the osidb_tool with the provided cve_id to retrieve CVE flaw data.
                 - Leverage title, description (or comment_zero), statement, references, affects, comments, and any other fields to infer affected components.
-                - Use github mcp tool to resolve vulnerability reference URLs if present (e.g. to confirm repo/component names).
-                - Follow GitHub/golang-style naming: use full import paths for Go packages outside stdlib.
-                - Output format: components (list of strings), explanation (string), confidence (0.00–1.00).
+                - Use github mcp tool to resolve vulnerability reference URLs if present (e.g. to confirm repo/component names, inspect commit diffs to identify which specific submodules or artifacts are affected).
+                - When a CVE mentions an umbrella project (e.g. 'Spring Framework', 'Apache Commons'), do not return the umbrella name — use tools to identify the specific affected Maven artifacts or submodules (e.g. 'org.springframework/spring-webmvc' not 'Spring Framework').
+                - If GHSA reference URLs are present in the flaw data, pass them to the osv_dev_ghsa tool to get structured affected-package data (package names, ecosystems, PURLs, version ranges) for component identification.
+                - Use osv_dev_ghsa_tool responses to determine impacted ecosystems — the affected[].package.ecosystem field is the most authoritative ecosystem signal.
+                - When osv_dev_ghsa_tool returns an affected package name, prefer it over names derived from the CVE title or description — the GHSA package name is the canonical registry identifier.
+                - Analyze CVE reference URLs to determine ecosystem: advisory URLs often indicate it (GHSA advisories, npmjs.com, pypi.org links, commit URLs pointing to upstream source). A vulnerability in core source code does not automatically mean every language binding is affected.
+                - Use 'unknown' for the ecosystem only when it genuinely cannot be determined from available data.
+                - For Go packages outside stdlib, always use the full module path (e.g. 'github.com/external-secrets/external-secrets', 'golang.org/x/net/html'). Never shorten to just the repo name. Strip Go major-version suffixes like /v2, /v7 from the path.
+                - Output format: components (list of strings), ecosystems (list of strings), explanation (string), confidence (0.00–1.00).
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=remove_keys(
-                static_context, keys_to_remove=deps.exclude_osidb_fields
-            ),
             output_schema=SuggestAffectedComponentsModel.model_json_schema(),
         )
-        return await self.run_if_safe(
+        return await self.guarded_run(
             prompt, deps=deps, output_type=SuggestAffectedComponentsModel
         )
 
@@ -409,9 +823,389 @@ class CVSSDiffExplainer(Feature):
                 - Keep the rationale brief and factual. If no difference, return an empty explanation.
             """,
             context=CVEFeatureInput(cve_id=cve_id),
-            static_context=static_context,
             output_schema=CVSSDiffExplainerModel.model_json_schema(),
         )
-        return await self.run_if_safe(
+        return await self.guarded_run(
             prompt, deps=deps, output_type=CVSSDiffExplainerModel
         )
+
+
+class QualityReview(Feature):
+    """Score CVE flaw content against a weighted quality rubric (0.0-1.0 scale) evaluated through a Customer Lens framework."""
+
+    _REQUIRED_CATEGORIES = set(CATEGORY_WEIGHTS.keys())
+
+    _REQUIRED_CRITERIA: set[str] = {
+        # Description - Technical Clarity
+        "component_location",
+        "vuln_type_mechanics",
+        "trigger_conditions",
+        "impact_sketch_cia",
+        "clarity_for_non_experts",
+        # Statement - Technical Clarity
+        "presence_per_cvss_rule",
+        "structured_formula_present",
+        "cvss_context_mentioned",
+        "cia_impacts_called_out",
+        "threat_nature_scope",
+        # Mitigation
+        "mitigation_section_exists",
+        "fix_version_specifics",
+        "actionable_steps",
+        "references_linked",
+        "risk_reduction_rationale",
+        # Grammar & Style
+        "spelling_punctuation",
+        "sentence_clarity",
+        "consistent_terminology",
+        "professional_tone",
+        "acronyms_defined",
+        # Content Ambiguity
+        "desc_stmt_match",
+        "products_versions_align",
+        "no_version_impact_conflicts",
+        "terminology_consistent",
+        "scope_limits_clear",
+        # Technical Value
+        "original_non_vague",
+        "root_cause_depth",
+        "attack_scenario_example",
+        "customer_relevance",
+        "standards_mapping",
+    }
+
+    def _check_output(self, result, deps) -> str | None:
+        """Enforce that all rubric criteria across all categories are present and unique."""
+        scores = result.output.scores
+        expected_count = len(self._REQUIRED_CRITERIA)
+
+        # Check total count
+        if len(scores) != expected_count:
+            return (
+                f"Expected exactly {expected_count} criterion scores, got {len(scores)}. "
+                f"QualityReviewModel requires all {expected_count} rubric criteria for a valid overall_score."
+            )
+
+        # Check all categories present and no unexpected categories
+        found_categories = {s["category"] for s in scores}
+        missing_categories = self._REQUIRED_CATEGORIES - found_categories
+        if missing_categories:
+            return (
+                f"Missing scores for categories: {', '.join(sorted(missing_categories))}. "
+                f"You must include criterion scores for all {len(self._REQUIRED_CATEGORIES)} rubric categories."
+            )
+        unexpected_categories = found_categories - self._REQUIRED_CATEGORIES
+        if unexpected_categories:
+            return (
+                f"Unexpected categories: {', '.join(sorted(unexpected_categories))}. "
+                f"Only these categories are valid: {', '.join(sorted(self._REQUIRED_CATEGORIES))}."
+            )
+
+        # Check all criterion IDs present and unique
+        found_criteria = {s["criterion_id"] for s in scores}
+        if len(found_criteria) != expected_count:
+            return (
+                f"Found {len(found_criteria)} unique criterion IDs but expected {expected_count}. "
+                "Each criterion must appear exactly once."
+            )
+        missing_criteria = self._REQUIRED_CRITERIA - found_criteria
+        if missing_criteria:
+            return (
+                f"Missing criterion IDs: {', '.join(sorted(missing_criteria))}. "
+                f"You must score all {expected_count} rubric criteria."
+            )
+
+        return None
+
+    async def exec(self, cve_id: CVEID, static_context: Any = None):
+        """Run the quality review rubric against the given CVE flaw content."""
+        deps = feature_deps(
+            exclude_osidb_fields=[],
+            static_context=static_context,
+        )
+
+        prompt = AegisPrompt(
+            user_instruction=(
+                f"Review the quality of CVE flaw content for {cve_id}. "
+                "Score it against the quality rubric and evaluate through the Customer Lens framework. "
+                "Use the OSIDB tool to retrieve all flaw data. "
+                "Assess the existing content — do not generate new descriptions or statements unless scoring reveals critical gaps. "
+                "Return your response as a single JSON object matching the output schema."
+            ),
+            goals="""\
+- Score the flaw content against a weighted rubric with 6 categories (5 criteria x 2 points each = 10 raw points per category, weighted to a 0.0-1.0 final score).
+- Category weights: Description 20%, Statement 25%, Mitigation 10%, Grammar 15%, Content Ambiguity 15%, Technical Value 15%.
+- Evaluate content through the Customer Lens: determine whether three customer personas (Ops/Sysadmin, Security/CISO, Compliance/Auditor) can answer their core questions from the existing content.
+- Identify strengths, critical gaps, and actionable recommendations.
+- When statement or mitigation content scores poorly, provide suggested rewrites.
+- Assess whether the flaw content adds value beyond what customers can find in public CVE databases.
+""",
+            rules="""\
+### RUBRIC CATEGORIES
+
+IMPORTANT: You MUST score ALL 30 criteria below (5 per category x 6 categories). Do not skip any category or criterion. Keep each justification to one sentence. Use the exact criterion_id values shown below.
+
+Score each criterion 0 (missing/wrong), 1 (partial), or 2 (fully met).
+
+**Category 1: Description - Technical Clarity** (up to 10 points)
+Evidence fields: description, affected_components, source_refs, cvss_vector, attack_scenario
+
+- component_location: Component & Location Identified
+  2 = Names the affected component AND precise code location (file and/or function).
+  1 = Component identified but no precise code location OR only a module path.
+  0 = No clear component or location identified.
+  Look for: file/function names (e.g., foo.c:bar()), package/module identifiers (e.g., org.apache.cxf...)
+
+- vuln_type_mechanics: Vulnerability Type & Mechanics
+  2 = States the type (e.g., use-after-free) AND explains why/how it occurs.
+  1 = States the type but not the mechanics (only labels).
+  0 = No type or incorrect type.
+  Look for: named class (buffer overflow, UAF, SQLi), short cause explanation.
+  Example: "Use-after-free due to double kfree on tcx_entry after clsact detach."
+
+- trigger_conditions: Trigger Conditions
+  2 = Explains the inputs/state that trigger the flaw (e.g., malformed header, specific qdisc sequence).
+  1 = Hints at a trigger but lacks specifics.
+  0 = No trigger described.
+  Look for: specific input patterns, preconditions (auth, config, feature flag).
+
+- impact_sketch_cia: Impact Sketch (CIA)
+  2 = Links to confidentiality, integrity, or availability clearly (e.g., info leak, code exec, DoS).
+  1 = Mentions impact but not mapped to CIA explicitly.
+  0 = No impact described.
+  Look for: CIA words or synonyms, RCE/DoS/data exposure mapping.
+
+- clarity_for_non_experts: Clarity for Non-Experts
+  2 = Uses simple language/analogy or example without losing accuracy.
+  1 = Mostly clear but heavy jargon or long sentences.
+  0 = Confusing/overly technical.
+  Look for: plain language explanation, short sentences, limited jargon.
+
+**Category 2: Statement - Technical Clarity** (up to 10 points)
+Evidence fields: statement, cvss_base, cvss_vector, affected_versions
+
+- presence_per_cvss_rule: Presence per CVSS Rule
+  2 = Statement present when required (CVSS>=7) or justified absence when <7.
+  1 = Statement present but incomplete or too generic.
+  0 = Missing when required.
+  Rule: If NVD/Red Hat CVSS >= 7.0, a succinct Statement must exist; if <7.0, absence may be acceptable.
+
+- structured_formula_present: Structured Formula Present
+  2 = Includes all five elements in a single, concise sentence/paragraph.
+  1 = Includes 3-4 elements.
+  0 = Includes <=2 elements.
+  Formula: component + location + type + trigger + impact.
+
+- cvss_context_mentioned: CVSS Context Mentioned
+  2 = Mentions AV/PR/AC (or their plain-language equivalents).
+  1 = Hints at context without clarity.
+  0 = No context.
+
+- cia_impacts_called_out: CIA Impacts Called Out
+  2 = Explicitly maps to C/I/A in statement.
+  1 = Impact present but not mapped to CIA.
+  0 = No impact.
+
+- threat_nature_scope: Threat Nature/Scope
+  2 = Names STRIDE category or explains scope/version differences (e.g., only 1.4-1.6).
+  1 = Mentions scope without clarity.
+  0 = No scope.
+
+**Category 3: Mitigation** (up to 10 points)
+Evidence fields: mitigation, fixed_in, references
+
+- mitigation_section_exists: Mitigation Section Exists
+  2 = A clearly labeled Mitigation/Workaround section exists.
+  1 = Mitigation is mixed into other text without a clear section.
+  0 = No mitigation content.
+
+- fix_version_specifics: Fix/Version Specifics
+  2 = Lists patched versions or explicitly states none exist yet.
+  1 = Mentions 'update' without versions.
+  0 = No fix/version info.
+
+- actionable_steps: Actionable Steps
+  2 = Concrete steps (config flags, commands, policy changes).
+  1 = High-level advice only.
+  0 = No steps.
+
+- references_linked: References Linked
+  2 = Links to vendor advisories/KBs/patch notes.
+  1 = Mentions external guidance without links/IDs.
+  0 = No references.
+
+- risk_reduction_rationale: Risk-Reduction Rationale
+  2 = Explains how the step reduces C/I/A impact.
+  1 = Implies benefit but not explicit.
+  0 = No rationale.
+
+**Category 4: Grammar & Style** (up to 10 points)
+Evidence fields: description, statement, mitigation
+
+- spelling_punctuation: Spelling/Punctuation
+  2 = No or minor errors; none impede understanding.
+  1 = Some errors but mostly understandable.
+  0 = Frequent errors impede understanding.
+
+- sentence_clarity: Sentence Clarity
+  2 = Clear, concise sentences; avoids run-ons.
+  1 = Partly clear but verbose.
+  0 = Confusing sentences/run-ons.
+
+- consistent_terminology: Consistent Terminology
+  2 = Terminology is consistent across sections.
+  1 = Minor inconsistencies.
+  0 = Conflicting terms.
+
+- professional_tone: Professional Tone
+  2 = Formal, precise tone throughout.
+  1 = Occasional informal phrasing.
+  0 = Informal/unprofessional tone.
+
+- acronyms_defined: Acronyms Defined
+  2 = Acronyms (CVSS, CIA, STRIDE) defined on first use.
+  1 = Some acronyms undefined.
+  0 = Acronyms not defined.
+
+**Category 5: Content Ambiguity** (up to 10 points)
+Evidence fields: description, statement, affected_products, affected_versions
+
+- desc_stmt_match: Description <-> Statement Match
+  2 = No contradictions between sections.
+  1 = Minor discrepancies.
+  0 = Contradictions exist.
+
+- products_versions_align: Products/Versions Align
+  2 = Listed products/versions align with described components.
+  1 = Partial alignment.
+  0 = Misaligned/contradictory.
+
+- no_version_impact_conflicts: No Version/Impact Conflicts
+  2 = Version ranges and impacts are consistent.
+  1 = Minor inconsistencies.
+  0 = Conflicts present.
+
+- terminology_consistent: Terminology Consistent
+  2 = Terms (e.g., 'DoS' vs 'hang') used consistently.
+  1 = Minor terminology drift.
+  0 = Inconsistent terminology.
+
+- scope_limits_clear: Scope & Limits Clear
+  2 = States preconditions/limits (auth level, config, platform).
+  1 = Implied but not explicit.
+  0 = No scope/limits provided.
+
+**Category 6: Technical Value** (up to 10 points)
+Evidence fields: description, statement, attack_scenario, cvss_vector
+
+- original_non_vague: Original & Non-Vague
+  2 = Original content; avoids boilerplate.
+  1 = Some boilerplate.
+  0 = Mostly generic.
+
+- root_cause_depth: Root-Cause Depth
+  2 = Explains why the flaw occurs (lifecycle/logic/bounds).
+  1 = Surface-level cause only.
+  0 = No cause explained.
+
+- attack_scenario_example: Attack Scenario/Example
+  2 = Provides realistic exploitation scenario or PoC shape.
+  1 = Vague scenario.
+  0 = No scenario.
+
+- customer_relevance: Customer Relevance
+  2 = Connects to user/system risk (e.g., multi-tenant exposure, data class).
+  1 = Generic risk.
+  0 = No customer angle.
+
+- standards_mapping: Standards Mapping
+  2 = Maps to CVSS, CIA, or STRIDE appropriately.
+  1 = Partial/implicit mapping.
+  0 = No mapping.
+
+### STATEMENT RULES
+
+- If ANY available CVSS base score (Red Hat or NVD) is >= 7.0, a statement MUST exist. If it is absent, this MUST appear in critical_gaps.
+- If ALL available CVSS base scores are < 7.0, statement absence is NOT a critical gap.
+- Statement quality is evaluated against the structured formula: component + location + type + trigger + impact.
+
+### REJECTED FLAW EXCEPTION
+
+- For rejected flaws (flaw state indicates rejection), do NOT require the 5-part structured formula for the statement.
+- Instead, the statement must explain the rationale for rejection. Award full points if the rejection rationale is clear.
+- Mitigation MAY be empty or state "No mitigation required." Award full points for mitigation criteria on rejected flaws.
+
+### BOILERPLATE AWARENESS
+
+- Detect and penalize boilerplate content: generic statements that could apply to any CVE without modification.
+- Examples of boilerplate: "This vulnerability could allow an attacker to execute arbitrary code", "Users should update to the latest version" without specifics.
+- Content that merely restates the CVE description from NVD without adding Red Hat context should score lower on originality.
+
+### CUSTOMER LENS FRAMEWORK
+
+Evaluate whether the content helps three customer personas answer their core questions:
+
+**Ops / Sysadmin** needs:
+- Package, service, or configuration names
+- Affected and fixed versions
+- Executable mitigations
+- Operational next steps
+
+**Security / CISO** needs:
+- Business risk assessment
+- Severity rationale
+- Exploit prerequisites
+- Exposure likelihood
+- Data classes at risk
+
+**Compliance / Auditor** needs:
+- CVSS score and vector
+- CWE classification
+- CIA impact assessment
+- STRIDE mapping
+- Affected and fixed versions
+- Remediation status
+- Citeable decision logic
+
+For each review, determine what customers CAN decide, what REMAINS UNCLEAR, and what needs MANUAL context from an analyst.
+
+The three core questions every review must address:
+1. Am I exposed?
+2. How bad is it for me?
+3. What should I do next?
+
+### SUGGESTED REWRITES
+
+- If the statement scores below 6/10 in Category 2, provide a suggested_statement rewrite.
+- If the mitigation scores below 6/10 in Category 3, provide a suggested_mitigation rewrite.
+- Rewrites should follow the structured formula and address identified gaps.
+
+**Statement rewrite rules:**
+- The suggested_statement MUST NOT duplicate the description — it should provide complementary context (severity rationale, scope, prerequisites), not restate the same technical details.
+- The suggested_statement MUST NOT mention mitigation steps, software updates, or patching.
+- Lead with severity narrative, not upstream component version strings.
+- Style: 2-4 concise sentences, < 1000 characters total.
+
+**Mitigation rewrite rules:**
+- The suggested_mitigation MUST describe a configuration or operational control that reduces exposure WITHOUT patching (e.g., config flags, sysctl, service disable, firewall rules, removing optional packages).
+- NEVER suggest updating, upgrading, or patching software in the mitigation.
+- NEVER use the term "update" in the mitigation.
+- NEVER invent config flags or commands — only suggest documented, supported controls.
+- If no safe, documented mitigation exists, set suggested_mitigation to null rather than providing generic upgrade advice.
+
+### OUTPUT RULES
+
+- Return ALL 30 criterion scores in the "scores" field as a flat list. Each entry must include: category (exact category name from above), criterion_id, score (0-2), and justification (one sentence).
+- Do NOT omit any category or criterion. The scores list must contain exactly 30 entries.
+- Do NOT compute overall_score or rating — these are auto-computed from your criterion scores.
+- Provide the customer_lens assessment with all three lists populated.
+- List concrete strengths, critical_gaps, and recommendations (not generic advice).
+- The value_add field should assess whether this flaw's content provides information customers cannot find in public CVE databases alone.
+- The explanation field should provide a brief summary of the quality review findings, highlighting the most significant strengths and gaps.
+- The disclaimer field MUST be exactly: "This response was generated by Aegis AI (https://github.com/RedHatProductSecurity/aegis-ai) using generative AI for informational purposes. All findings should be validated by a human expert."
+""",
+            context=CVEFeatureInput(cve_id=cve_id),
+            output_schema=QualityReviewModel.model_json_schema(),
+        )
+
+        return await self.guarded_run(prompt, deps=deps, output_type=QualityReviewModel)

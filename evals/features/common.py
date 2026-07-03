@@ -1,10 +1,17 @@
 import asyncio
 import io
+import json
 import logging
+import math
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from rich.console import Console
-from typing import Sequence, Any
+from typing import Sequence, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from google.genai.errors import ServerError
 from pydantic_ai.exceptions import ModelHTTPError
@@ -25,7 +32,7 @@ from pydantic_evals.reporting.render_numbers import default_render_number
 
 from aegis_ai import get_settings
 from aegis_ai.agents import agent_default_max_retries
-from aegis_ai.features import PROMPT_RETRY_503_DELAY_INIT
+from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_503_DELAY_INIT
 from aegis_ai.features.data_models import AegisFeatureModel
 
 
@@ -39,18 +46,22 @@ FIELD_RUBRICS = {
         "Score how much the actual suggested_title field is semantically equivalent "
         "to the expected suggest_title field.  If the key message is the same but the "
         "style is different, the score should not be zero.  If the style is different, "
-        "the score should not be 1.0."
+        "the score should not be 1.0.  Penalize titles that are overly long or that try "
+        "to pack every impact dimension into the headline instead of summarizing the core issue."
     ),
     "suggest-description": (
         "Score how much the actual suggested_description field is semantically equivalent "
         "to the expected suggest_description field.  If the key message is the same but "
         "the style is different, the score should not be zero.  If the style is different, "
-        "the score should not be 1.0."
+        "the score should not be 1.0.  Penalize vague or padded prose when the expected text "
+        "is precise; reward clear advisory-style wording comparable to a well-written upstream summary."
     ),
     "suggest-statement": (
         "Score semantic equivalence between the actual suggested_statement and the expected "
         "suggested_statement.  Emphasize matching rationale (impact justification in RH context, "
-        "preconditions, scope).  If style differs but the core message overlaps, the score should "
+        "preconditions, scope).  The statement should add value beyond restating the CVE "
+        "description and should not merely duplicate product/version lists that belong in Affects. "
+        "If style differs but the core message overlaps, the score should "
         "be > 0.0 and < 1.0 depending on overlap.  Only assign 0.0 if the actual is irrelevant "
         "to the CVE or contradicts the expected meaning.  When partially aligned but missing details, "
         "prefer a low non-zero score (e.g., 0.12–0.3) rather than 0.0."
@@ -157,9 +168,13 @@ class LLMJudgeWrapper(LLMJudge):
                 return await super().evaluate(ctx)
 
             except (ModelHTTPError, ServerError) as e:
+                if agent_default_max_retries <= attempt:
+                    # exceeded retry attempts count
+                    raise
+
                 code = e.status_code if isinstance(e, ModelHTTPError) else e.code
-                if agent_default_max_retries <= attempt or code not in [500, 503]:
-                    # propagate other exceptions (or exceeded retry attempts)
+                if code not in HTTP_RETRY_CODES:
+                    # propagate other exceptions
                     raise
 
                 # increment the counter of retries
@@ -210,16 +225,25 @@ def eval_name_from_result(result):
 
 
 def _format_suggest_affected_components_output(val: Any) -> str:
-    """Format suggest_affected_components output for display: show components only."""
+    """Format suggest_affected_components output for display."""
     if val is None:
         return ""
+    parts: list[str] = []
     if hasattr(val, "components") and val.components is not None:
-        return str(val.components)
-    return str(val)
+        parts.append(str(val.components))
+    if hasattr(val, "ecosystems") and val.ecosystems:
+        parts.append(f"ecosystems={val.ecosystems}")
+    if hasattr(val, "data_quality"):
+        parts.append(f"data_quality={val.data_quality}")
+    if hasattr(val, "confidence"):
+        parts.append(f"confidence={val.confidence}")
+    return " ".join(parts) if parts else str(val)
 
 
 def _score_with_threshold_indicator(value: float | int) -> str:
     """Format score with pass/fail indicator based on MIN_SCORE_THRESHOLD."""
+    if isinstance(value, float) and math.isnan(value):
+        return "NaN [red]✗[/]"
     formatted = default_render_number(value)
     indicator = "[green]✔[/]" if value >= MIN_SCORE_THRESHOLD else "[red]✗[/]"
     return f"{formatted} {indicator}"
@@ -243,8 +267,13 @@ def is_evaluator_known_to_fail(ecase, eval_name):
     )
 
 
-def handle_eval_report(report: EvaluationReport):
-    """print evaluation summary and trigger assertion failure in case any assertion failed"""
+def _log_eval_report(report: EvaluationReport) -> str:
+    """Log the evaluation report and return any failure messages.
+
+    Always succeeds — logs the rich table, records global summary/metrics,
+    and returns a (possibly empty) string of assertion failures.  Callers
+    decide whether to raise.
+    """
     # capture the report as a string
     string_io = io.StringIO()
     console = Console(file=string_io, force_terminal=True)
@@ -326,7 +355,12 @@ def handle_eval_report(report: EvaluationReport):
                     failures += f", reason: {result.reason}"
                 failures += "\n"
 
-    # report all failures at once (if any)
+    return failures
+
+
+def handle_eval_report(report: EvaluationReport):
+    """Print evaluation summary and trigger assertion failure in case any assertion failed."""
+    failures = _log_eval_report(report)
     assert not failures, f"Unsatisfied assertion(s):\n{failures}"
 
 
@@ -337,6 +371,7 @@ async def run_evaluation(
     *,
     max_concurrency: int | None = None,
     agent=None,
+    on_report: "Callable[[EvaluationReport, str], None] | None" = None,
 ) -> EvaluationReport:
     """Create a dataset for the given cases/evaluators and evaluate the given task.
 
@@ -344,9 +379,18 @@ async def run_evaluation(
     MCP connections are entered/exited in the same task, avoiding anyio cancel-scope
     errors. max_concurrency overrides the default (llm_max_jobs) when provided.
 
+    ``on_report``, when provided, is called with ``(report, failures)``
+    **before** the assertion fires.  This guarantees that export/audit
+    hooks run even when the eval suite has failures.  Exceptions inside
+    the callback are logged but do not suppress the original assertion.
+
     Returns the EvaluationReport for tests that need to assert on evaluation results.
     """
-    dataset = Dataset(cases=cases, evaluators=evals)
+    dataset = Dataset(
+        name=task.__name__,
+        cases=cases,
+        evaluators=evals,
+    )
     debug = logger.isEnabledFor(logging.DEBUG)
     concurrency = (
         max_concurrency if max_concurrency is not None else get_settings().llm_max_jobs
@@ -361,16 +405,140 @@ async def run_evaluation(
     else:
         report = await _evaluate()
 
-    handle_eval_report(report)
+    failures = _log_eval_report(report)
+
+    if on_report is not None:
+        try:
+            on_report(report, failures)
+        except Exception:
+            logger.exception("on_report callback failed (report was still written)")
+
+    assert not failures, f"Unsatisfied assertion(s):\n{failures}"
     return report
 
 
 class ToolsUsedEvaluator(Evaluator[str, AegisFeatureModel]):
+    # Any authoritative CVE data source satisfies this check.  kernel_cve is
+    # the primary source for kernel CVEs when the linux-CVE tool is enabled.
+    # kernel_impact_tool fetches git patch data from kernel.org/GitHub and
+    # counts as evidence that the agent queried an external CVE data source.
+    _cve_data_tools = ("osidb_tool", "kernel_cve", "kernel_impact_tool")
+
     def evaluate(self, ctx) -> EvaluationReason:
+        used = ctx.output.tools_used
+        hit = any(any(alias in tool for alias in self._cve_data_tools) for tool in used)
         return make_eval_reason(
-            any("osidb_tool" in tool for tool in ctx.output.tools_used),
-            "osidb_tool was not used by the agent",
+            hit,
+            f"no CVE data tool ({', '.join(self._cve_data_tools)}) was used by the agent",
         )
+
+
+def _parse_trace(trace: str | None) -> tuple[list[str], list[str]]:
+    """Extract rules_fired and guardrails_fired lists from a reconciliation trace."""
+    import re
+
+    rules: list[str] = []
+    guardrails: list[str] = []
+    if trace:
+        m = re.search(r"rules=\[([^\]]*)\]", trace)
+        if m:
+            rules = [r.strip() for r in m.group(1).split(",") if r.strip()]
+        m = re.search(r"guardrails=\[([^\]]*)\]", trace)
+        if m:
+            guardrails = [g.strip() for g in m.group(1).split(",") if g.strip()]
+    return rules, guardrails
+
+
+def export_eval_results(
+    report: EvaluationReport,
+    output_path: Path,
+    *,
+    classifier_diagnostics: dict[str, dict | None] | None = None,
+) -> Path:
+    """Write structured per-case eval results to a JSON file for post-hoc analysis.
+
+    Args:
+        report: the evaluation report from pydantic_evals
+        output_path: where to write the JSON file
+        classifier_diagnostics: optional dict mapping CVE ID -> classifier result dict
+
+    Returns:
+        the path written to
+    """
+    classifier_diagnostics = classifier_diagnostics or {}
+    cases_out: list[dict[str, Any]] = []
+
+    for ecase in report.cases:
+        output = ecase.output
+        expected = ecase.expected_output
+
+        case_data: dict[str, Any] = {
+            "cve_id": ecase.inputs,
+            "expected_impact": getattr(expected, "impact", None) if expected else None,
+            "predicted_impact": getattr(output, "impact", None),
+            "predicted_cvss3_score": getattr(output, "cvss3_score", None),
+            "predicted_cvss3_vector": getattr(output, "cvss3_vector", None),
+            "confidence": getattr(output, "confidence", None),
+            "explanation": getattr(output, "explanation", None),
+            "deescalation_rationale": getattr(output, "deescalation_rationale", None),
+        }
+
+        diag = classifier_diagnostics.get(ecase.inputs)
+        if diag is None and hasattr(output, "_classifier_diagnostics"):
+            diag = output._classifier_diagnostics
+        escalation = getattr(output, "_escalation_floor_applied", False)
+        reconciliation_trace = getattr(output, "_reconciliation_trace", None)
+
+        case_data["classifier"] = None
+        if diag:
+            rules_fired, guardrails_fired = _parse_trace(reconciliation_trace)
+            case_data["classifier"] = {
+                "impact": diag.get("impact"),
+                "confidence": diag.get("confidence"),
+                "probabilities": diag.get("probabilities"),
+                "active_features": diag.get("active_features"),
+                "cvss_score": diag.get("cvss_score"),
+                "cvss_vector": diag.get("cvss_vector"),
+                "patches_analyzed": diag.get("patches_analyzed"),
+                "escalation_floor_applied": escalation,
+                "reconciliation_trace": reconciliation_trace,
+                "rules_fired": rules_fired,
+                "guardrails_fired": guardrails_fired,
+            }
+
+        evaluators: dict[str, Any] = {}
+        for name, result in ecase.assertions.items():
+            evaluators[name] = {
+                "passed": result.value,
+                "reason": result.reason,
+            }
+        for name, result in ecase.scores.items():
+            evaluators[name] = {"score": result.value}
+        case_data["evaluators"] = evaluators
+
+        cases_out.append(case_data)
+
+    for failure in report.failures:
+        cases_out.append(
+            {
+                "cve_id": failure.inputs,
+                "error": failure.error_message,
+            }
+        )
+
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "name": report.name,
+        "total_cases": len(report.cases) + len(report.failures),
+        "evaluated": len(report.cases),
+        "failed_to_run": len(report.failures),
+        "cases": cases_out,
+    }
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2, default=str) + "\n")
+    logger.info("Eval results exported to %s", output_path)
+    return output_path
 
 
 common_feature_evals = [

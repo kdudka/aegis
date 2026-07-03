@@ -25,6 +25,8 @@ spec:
     value: quay.io/redhat-user-workloads/kdudka-tenant/aegis-ai:{{revision}}
   - name: dockerfile
     value: Containerfile
+  - name: apply-git-tag-labels
+    value: "true"
   # update the `:latest` tag on the container image only if it is built from the `main` branch
   - name: ADDITIONAL_TAGS
     value: [latest]
@@ -42,23 +44,6 @@ spec:
       value: pipeline
   taskRunTemplate:
     serviceAccountName: build-pipeline-aegis-ai
-  taskRunSpecs:
-  - pipelineTaskName: sast-coverity-check
-    stepSpecs:
-    - name: build
-      computeResources:
-        requests:
-          cpu: 1
-          memory: 3Gi
-        limits:
-          memory: 8Gi
-    - name: postprocess
-      computeResources:
-        requests:
-          cpu: 1
-          memory: "1Gi"
-        limits:
-          memory: "2Gi"
   workspaces:
   - name: git-auth
     secret:
