@@ -2,7 +2,7 @@
     "url": "https://typo3.org/security/advisory/typo3-ext-sa-2025-011",
     "result": {
         "status": "blocked",
-        "error_message": "URL not in allowlist: typo3.org",
+        "error_message": "URL not in allowlist: https://typo3.org/security/advisory/typo3-ext-sa-2025-011",
         "url": "https://typo3.org/security/advisory/typo3-ext-sa-2025-011",
         "content_type": null,
         "extracted_text": null

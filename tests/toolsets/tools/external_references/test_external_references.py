@@ -1,7 +1,7 @@
 import pytest
 
 from aegis_ai.toolsets.tools.external_references import (
-    ALLOWED_HOSTS,
+    ALLOWED_URL_PREFIXES,
     MAX_CONTENT_LENGTH,
     MAX_READ_BYTES,
     ExternalReferenceResult,
@@ -38,9 +38,9 @@ class TestValidateUrl:
     def test_empty_string(self):
         assert not validate_url("")
 
-    def test_all_allowed_hosts_are_lowercase(self):
-        for host in ALLOWED_HOSTS:
-            assert host == host.lower(), f"Host {host} should be lowercase"
+    def test_all_prefixes_are_well_formed(self):
+        for prefix in ALLOWED_URL_PREFIXES:
+            assert prefix.startswith("https://"), f"Must start with https://: {prefix}"
 
 
 class TestNormalizeCveOrgUrl:

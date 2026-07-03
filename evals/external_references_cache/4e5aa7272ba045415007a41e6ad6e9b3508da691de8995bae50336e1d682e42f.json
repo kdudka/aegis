@@ -2,7 +2,7 @@
     "url": "https://grafana.com/security/security-advisories/cve-2026-21727",
     "result": {
         "status": "blocked",
-        "error_message": "URL not in allowlist: grafana.com",
+        "error_message": "URL not in allowlist: https://grafana.com/security/security-advisories/cve-2026-21727",
         "url": "https://grafana.com/security/security-advisories/cve-2026-21727",
         "content_type": null,
         "extracted_text": null

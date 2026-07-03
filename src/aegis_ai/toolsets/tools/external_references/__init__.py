@@ -28,46 +28,44 @@ from aegis_ai.toolsets.tools import (
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_HOSTS = frozenset(
-    {
-        # CVE registries
-        "www.cve.org",
-        "cveawg.mitre.org",
-        "nvd.nist.gov",
-        # Git forges (commits, PRs, advisories)
-        "github.com",
-        "gitlab.com",
-        "gitlab.gnome.org",
-        # Kernel sources
-        "git.kernel.org",
-        "lore.kernel.org",
-        # Language ecosystem advisories
-        "go.dev",
-        "pkg.go.dev",
-        "rustsec.org",
-        "crates.io",
-        "www.npmjs.com",
-        # Project-specific security pages
-        "curl.se",
-        "openssl-library.org",
-        "www.openwall.com",
-        "kb.isc.org",
-        "www.mozilla.org",
-        "nodejs.org",
-        "www.jenkins.io",
-        "httpd.apache.org",
-        "docs.djangoproject.com",
-        "www.djangoproject.com",
-        "www.sudo.ws",
-        "www.openssh.com",
-        "www.openssh.org",
-        # Vulnerability databases
-        "osv.dev",
-        "hackerone.com",
-        "huntr.com",
-        # Standards / specs
-        "datatracker.ietf.org",
-    }
+ALLOWED_URL_PREFIXES = (
+    # CVE registries
+    "https://cveawg.mitre.org/",
+    "https://nvd.nist.gov/",
+    "https://www.cve.org/",
+    # Git forges (commits, PRs, advisories)
+    "https://github.com/",
+    "https://gitlab.com/",
+    "https://gitlab.gnome.org/",
+    # Kernel sources
+    "https://git.kernel.org/",
+    "https://lore.kernel.org/",
+    # Language ecosystem advisories
+    "https://crates.io/",
+    "https://go.dev/",
+    "https://pkg.go.dev/",
+    "https://rustsec.org/",
+    "https://www.npmjs.com/",
+    # Project-specific security pages
+    "https://curl.se/",
+    "https://docs.djangoproject.com/",
+    "https://httpd.apache.org/",
+    "https://kb.isc.org/",
+    "https://nodejs.org/",
+    "https://openssl-library.org/",
+    "https://www.djangoproject.com/",
+    "https://www.jenkins.io/",
+    "https://www.mozilla.org/",
+    "https://www.openssh.com/",
+    "https://www.openssh.org/",
+    "https://www.openwall.com/",
+    "https://www.sudo.ws/",
+    # Vulnerability databases
+    "https://hackerone.com/",
+    "https://huntr.com/",
+    "https://osv.dev/",
+    # Standards / specs
+    "https://datatracker.ietf.org/",
 )
 
 MAX_CONTENT_LENGTH = 8000
@@ -97,13 +95,27 @@ class ExternalReferenceResult(BaseToolOutput):
     )
 
 
+def _url_matches_prefix(url: str) -> bool:
+    """Return True if url starts with any allowed URL prefix, ignoring a single trailing slash on either."""
+    normalized_url = url[:-1] if url.endswith("/") else url
+
+    for prefix in ALLOWED_URL_PREFIXES:
+        normalized_prefix = prefix[:-1] if prefix.endswith("/") else prefix
+        if normalized_url.startswith(normalized_prefix):
+            return True
+
+    return False
+
+
 def validate_url(url: str) -> bool:
-    """Check that url uses HTTPS and its hostname is in the allowlist."""
+    """Check that url uses HTTPS and matches an allowed URL prefix."""
     try:
         parsed = urlparse(url)
     except Exception:
         return False
-    return parsed.scheme == "https" and parsed.hostname in ALLOWED_HOSTS
+    if parsed.scheme != "https":
+        return False
+    return _url_matches_prefix(url)
 
 
 def _normalize_cve_org_url(url: str) -> Optional[str]:
@@ -256,7 +268,7 @@ async def fetch_reference(url: str) -> ExternalReferenceResult:
         return ExternalReferenceResult(
             url=url,
             status="blocked",
-            error_message=f"URL not in allowlist: {urlparse(url).hostname}",
+            error_message=f"URL not in allowlist: {url}",
         )
 
     fetch_url = _normalize_cve_org_url(url) or url
@@ -268,12 +280,11 @@ async def fetch_reference(url: str) -> ExternalReferenceResult:
             follow_redirects=True,
         ) as client:
             async with client.stream("GET", fetch_url) as resp:
-                final_host = resp.url.host
-                if final_host not in ALLOWED_HOSTS:
+                if not _url_matches_prefix(str(resp.url)):
                     return ExternalReferenceResult(
                         url=url,
                         status="blocked",
-                        error_message=f"Redirect to non-allowed host: {final_host}",
+                        error_message=f"Redirect to non-allowed URL: {resp.url}",
                     )
 
                 resp.raise_for_status()
