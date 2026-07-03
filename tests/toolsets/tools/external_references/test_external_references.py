@@ -42,6 +42,18 @@ class TestValidateUrl:
         for prefix in ALLOWED_URL_PREFIXES:
             assert prefix.startswith("https://"), f"Must start with https://: {prefix}"
 
+    def test_github_unlisted_repo_blocked(self):
+        assert not validate_url("https://github.com/ZeroXJacks/CVEs/issues/1")
+
+    def test_github_listed_repo_allowed(self):
+        assert validate_url("https://github.com/python/cpython/issues/12345")
+
+    def test_prefix_trailing_slash_equivalence(self):
+        assert validate_url("https://github.com/python/cpython")
+
+    def test_prefix_trailing_slash_prevents_substring(self):
+        assert not validate_url("https://github.com/python/cpython-evil/exploit")
+
 
 class TestNormalizeCveOrgUrl:
     def test_standard_url(self):
