@@ -215,8 +215,8 @@ cases = [
         cwe_list=["CWE-772", "CWE-459"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -331,7 +331,6 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2023-53764",
         cwe_list=["CWE-414", "CWE-413"],  # kdudka: added CWE-413
-        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53843",
@@ -363,8 +362,8 @@ cases = [
         cwe_list=["CWE-459"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -387,8 +386,8 @@ cases = [
         cwe_list=["CWE-825", "CWE-826"],  # kdudka: added CWE-826
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -453,8 +452,8 @@ cases = [
         cwe_list=["CWE-779"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -477,8 +476,8 @@ cases = [
         cwe_list=["CWE-413"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ],
         },
     ),
@@ -498,8 +497,8 @@ cases = [
         cwe_list=["CWE-120", "CWE-787", "CWE-124"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -582,8 +581,8 @@ cases = [
         cwe_list=["CWE-358"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -609,8 +608,8 @@ cases = [
         cwe_list=["CWE-413", "CWE-821", "CWE-833"],  # kdudka: added CWE-821 and CWE-833
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -669,12 +668,9 @@ cases = [
         cwe_list=["CWE-825"],
         metadata={"known_to_fail_evaluators": ["SuggestCweEvaluator"]},
     ),
-    # LLM judge says the explanation incorrectly equates CWE-825 (Expired
-    # Pointer Dereference) with use-after-free.
     SuggestCweCase(
         cve_id="CVE-2025-39864",
         cwe_list=["CWE-763", "CWE-825"],
-        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-39865",
@@ -735,8 +731,8 @@ cases = [
         cwe_list=["CWE-617", "CWE-476"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -763,8 +759,8 @@ cases = [
         cwe_list=["CWE-770"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -776,7 +772,6 @@ cases = [
     SuggestCweCase(
         cve_id="CVE-2025-54771",
         cwe_list=["CWE-825"],
-        metadata={"known_to_fail_evaluators": ["CWEExplanationRootCause"]},
     ),
     SuggestCweCase(
         cve_id="CVE-2025-55559",
@@ -885,8 +880,8 @@ cases = [
         cwe_list=["CWE-613"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -905,8 +900,8 @@ cases = [
         cwe_list=["CWE-791"],
         metadata={
             "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
                 "CWEExplanationRootCause",
+                "SuggestCweEvaluator",
             ]
         },
     ),
@@ -1040,7 +1035,9 @@ evals = common_feature_evals + [
             "Pass if the explanation is non-empty and describes a plausible technical weakness (memory, sync, "
             "injection, resource handling, auth, etc.). CWE selection is often debatable; ranked lists may include "
             "imperfect secondary IDs. Do not fail because one CWE in the list is a stretch or contradicts the narrative "
-            "while another CWE in the same list fits. Fail only if the explanation is empty, incoherent, or none of the "
+            "while another CWE in the same list fits. Do not look up or guess CWE names/definitions yourself — your "
+            "training data may contain wrong or outdated CWE titles. Judge only by what the output states. "
+            "Fail only if the explanation is empty, incoherent, or none of the "
             "listed CWEs could reasonably relate to the described flaw."
         ),
     ),
