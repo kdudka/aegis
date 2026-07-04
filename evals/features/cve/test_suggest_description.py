@@ -312,7 +312,6 @@ cases = [
         cve_id="CVE-2026-57437",
         expected_title="Nokogiri: Denial of Service due to improper XPathContext garbage collection",
         expected_description="A flaw was found in Nokogiri, an XML and HTML library for Ruby. This vulnerability occurs when an application directly constructs an XPathContext and allows its associated document to be garbage collected while the context is still in use. An attacker could potentially exploit this by causing the application to read invalid memory, leading to a denial of service (DoS) through a segmentation fault.",
-        metadata={"known_to_fail_evaluators": ["NoExploitDisclosure"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2099-99999",
@@ -333,7 +332,7 @@ evals = common_feature_evals + [
     ),
     create_llm_judge(
         assertion_name="NoExploitDisclosure",
-        rubric="suggested_description does not mention exploit availability or public disclosure status (e.g., 'The exploit has been publicly disclosed', 'A public exploit exists'). The description should focus on the vulnerability itself, not on whether exploits are available.",
+        rubric="suggested_description does not mention exploit availability or public disclosure status (e.g., 'The exploit has been publicly disclosed', 'A public exploit exists'). Phrases that describe how the flaw can be exploited (e.g., 'A local user can exploit this') are fine — they describe the attack vector, not exploit availability. The description should focus on the vulnerability itself, not on whether exploits are available.",
     ),
     create_llm_judge(
         assertion_name="TitleSummarizesDescription",
