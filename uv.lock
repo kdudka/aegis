@@ -3017,7 +3017,7 @@ wheels = [
 
 [[package]]
 name = "osidb-bindings"
-version = "5.11.0"
+version = "5.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -3026,9 +3026,9 @@ dependencies = [
     { name = "requests" },
     { name = "requests-gssapi" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c7/16/50cdf15b4143c58dbb615e68adff248a1068ac293f63721f1950c486445c/osidb_bindings-5.11.0.tar.gz", hash = "sha256:fe1e57504ecbb00f5a2b66cdb16a9e7ffce95c50dfb615752d6a637181ba67e3", size = 323415, upload-time = "2026-06-02T08:27:20.248Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/90/e41c0632d11e7bc16e82eca7c2bdaef630796d5f43dba4db634a9a5e4ee7/osidb_bindings-5.12.0.tar.gz", hash = "sha256:671834ec5c933a28613ae1dfcefece8bf0439fd32f40746403626e7200aabf01", size = 323916, upload-time = "2026-07-03T14:53:11.837Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/35/21ab39b511d72ffe276738d7697d407c42b845955abca883497c6bd4de95/osidb_bindings-5.11.0-py3-none-any.whl", hash = "sha256:3754c25fd472ca1968686304651a83f76be60cbe965cb00d009d6c27cde2da8c", size = 796080, upload-time = "2026-06-02T08:27:19.017Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/6a/81157d1689d9e03c563d5e0bd29b751f1317324ba180d6d91db24d23a91c/osidb_bindings-5.12.0-py3-none-any.whl", hash = "sha256:acde14221ef851cb20df769680200f5d9cfc48bd7661bacd5cff59023201d0e6", size = 798699, upload-time = "2026-07-03T14:53:10.191Z" },
 ]
 
 [[package]]
@@ -4665,7 +4665,7 @@ wheels = [
 
 [[package]]
 name = "transformers"
-version = "5.12.1"
+version = "5.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -4678,9 +4678,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/aa/7c/8240f612819718100a9346dc28dea6a11370c3ca9c8c6eabadd3dea4ef29/transformers-5.12.1.tar.gz", hash = "sha256:679ee731c8225347889ad4fb3b2c926a62e9da3b7d284e9d12c791da7272466b", size = 8924054, upload-time = "2026-06-15T17:27:50.604Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/e1/720ff7ff666b04279fea5bb7ac3ef8675e98f0ddbc1b8cb8bc9f3889d62e/transformers-5.13.0.tar.gz", hash = "sha256:940c1428e42a4238f9ccf0cd41e63c590701aa63c19fd2ce3d7d602222d68495", size = 9195801, upload-time = "2026-07-03T16:05:39.362Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/56/bbd60dd8668055803bf8ba55a81f9b8a8b31497f620109a9671d26a2076d/transformers-5.12.1-py3-none-any.whl", hash = "sha256:2a5e109d2021265df7098ffbb738295acaf5ad256f12cbc586db2ea4dcbb1a8a", size = 11150587, upload-time = "2026-06-15T17:27:46.679Z" },
+    { url = "https://files.pythonhosted.org/packages/a5/3a/d99704c5effe10c6339c98cb236259161103e159bb99a78468b6729572ec/transformers-5.13.0-py3-none-any.whl", hash = "sha256:8adbc1d20bd5463cd6876b2eb7cb31971e1065788e7dc6bc12bab597a7c504b7", size = 11503730, upload-time = "2026-07-03T16:05:35.569Z" },
 ]
 
 [[package]]
