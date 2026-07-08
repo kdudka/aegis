@@ -70,8 +70,12 @@ HTML_COMMIT_URL_TEMPLATES = [
 ]
 
 
-def is_kernel_component(components: list) -> bool:
+def is_kernel_component(components: list | str | None) -> bool:
     """Check if any component in the list indicates a Linux kernel flaw."""
+    if not components:
+        return False
+    if isinstance(components, str):
+        components = [components]
     return bool(
         {c.lower().strip() for c in components if isinstance(c, str)}
         & KERNEL_COMPONENTS
