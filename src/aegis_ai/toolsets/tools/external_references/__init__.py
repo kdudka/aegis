@@ -362,7 +362,6 @@ async def external_references_tool(
         async with sem:
             return await fetch_reference(u)
 
-    logger.info("Fetching %d external reference(s)...", len(unique_urls))
     tasks = [asyncio.create_task(_guarded(u)) for u in unique_urls]
     results: list[ExternalReferenceResult] = []
     try:
@@ -380,6 +379,9 @@ async def external_references_tool(
             len(results),
             dropped,
         )
+    fetched = [r.url for r in results if r.status == "success"]
+    if fetched:
+        logger.info("Fetched %d external reference(s): %s", len(fetched), fetched)
     return results
 
 
