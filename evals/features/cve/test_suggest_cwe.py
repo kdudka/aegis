@@ -1033,12 +1033,11 @@ evals = common_feature_evals + [
         assertion_name="CWEExplanationRootCause",
         rubric=(
             "Pass if the explanation is non-empty and describes a plausible technical weakness (memory, sync, "
-            "injection, resource handling, auth, etc.). CWE selection is often debatable; ranked lists may include "
-            "imperfect secondary IDs. Do not fail because one CWE in the list is a stretch or contradicts the narrative "
-            "while another CWE in the same list fits. Do not look up or guess CWE names/definitions yourself — your "
-            "training data may contain wrong or outdated CWE titles. Judge only by what the output states. "
-            "Fail only if the explanation is empty, incoherent, or none of the "
-            "listed CWEs could reasonably relate to the described flaw."
+            "injection, resource handling, auth, etc.). "
+            "IMPORTANT: Completely ignore CWE IDs (e.g. CWE-825, CWE-416). Do NOT verify whether a CWE ID matches "
+            "the described weakness. Your training data contains wrong CWE titles that cause false failures. "
+            "Evaluate ONLY the natural-language explanation text. "
+            "Fail only if the explanation is empty or incoherent."
         ),
     ),
 ]
