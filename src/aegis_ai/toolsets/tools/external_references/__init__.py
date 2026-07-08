@@ -33,8 +33,47 @@ ALLOWED_URL_PREFIXES = (
     "https://cveawg.mitre.org/api/cve/",
     "https://nvd.nist.gov/vuln/detail/",
     "https://www.cve.org/CVERecord",
-    # GitHub — per-repo prefixes (multi-tenant; broad "https://github.com/" is
-    # intentionally avoided to block untrusted PoC/exploit repositories)
+    # GitLab — per-project prefixes
+    "https://gitlab.com/gitlab-org/gitlab/",
+    "https://gitlab.gnome.org/GNOME/",
+    # Kernel sources
+    "https://git.kernel.org/pub/scm/",
+    "https://git.kernel.org/stable/c/",
+    "https://lore.kernel.org/linux-cve-announce/",
+    "https://lore.kernel.org/lkml/",
+    # Language ecosystem advisories
+    "https://crates.io/crates/",
+    "https://go.dev/cl/",
+    "https://go.dev/issue/",
+    "https://pkg.go.dev/vuln/",
+    "https://rustsec.org/advisories/",
+    "https://www.npmjs.com/package/",
+    # Project-specific security pages
+    "https://curl.se/docs/",
+    "https://docs.djangoproject.com/en/",
+    "https://httpd.apache.org/security/",
+    "https://kb.isc.org/docs/",
+    "https://nodejs.org/en/blog/vulnerability/",
+    "https://openssl-library.org/news/secadv/",
+    "https://www.djangoproject.com/weblog/",
+    "https://www.jenkins.io/security/advisory/",
+    "https://www.mozilla.org/security/advisories/",
+    "https://www.openssh.com/releasenotes",
+    "https://www.openssh.org/releasenotes",
+    "https://www.openwall.com/lists/oss-security/",
+    "https://www.sudo.ws/security/",
+    # Vulnerability databases
+    "https://hackerone.com/reports/",
+    "https://huntr.com/bounties/",
+    "https://osv.dev/vulnerability/",
+    # Standards / specs
+    "https://datatracker.ietf.org/doc/",
+)
+
+# GitHub — per-repo prefixes (multi-tenant; broad "https://github.com/" is
+# intentionally avoided to block untrusted PoC/exploit repositories).
+# URLs must also match a path type in _GITHUB_ALLOWED_PATH_PREFIXES.
+_GITHUB_REPO_PREFIXES = (
     "https://github.com/FasterXML/jackson-databind/",
     "https://github.com/FluidSynth/fluidsynth/",
     "https://github.com/FreeRDP/FreeRDP/",
@@ -147,41 +186,16 @@ ALLOWED_URL_PREFIXES = (
     "https://github.com/vllm-project/vllm/",
     "https://github.com/xwiki/xwiki-platform/",
     "https://github.com/yt-dlp/yt-dlp/",
-    # GitLab — per-project prefixes
-    "https://gitlab.com/gitlab-org/gitlab/",
-    "https://gitlab.gnome.org/GNOME/",
-    # Kernel sources
-    "https://git.kernel.org/pub/scm/",
-    "https://git.kernel.org/stable/c/",
-    "https://lore.kernel.org/linux-cve-announce/",
-    "https://lore.kernel.org/lkml/",
-    # Language ecosystem advisories
-    "https://crates.io/crates/",
-    "https://go.dev/cl/",
-    "https://go.dev/issue/",
-    "https://pkg.go.dev/vuln/",
-    "https://rustsec.org/advisories/",
-    "https://www.npmjs.com/package/",
-    # Project-specific security pages
-    "https://curl.se/docs/",
-    "https://docs.djangoproject.com/en/",
-    "https://httpd.apache.org/security/",
-    "https://kb.isc.org/docs/",
-    "https://nodejs.org/en/blog/vulnerability/",
-    "https://openssl-library.org/news/secadv/",
-    "https://www.djangoproject.com/weblog/",
-    "https://www.jenkins.io/security/advisory/",
-    "https://www.mozilla.org/security/advisories/",
-    "https://www.openssh.com/releasenotes",
-    "https://www.openssh.org/releasenotes",
-    "https://www.openwall.com/lists/oss-security/",
-    "https://www.sudo.ws/security/",
-    # Vulnerability databases
-    "https://hackerone.com/reports/",
-    "https://huntr.com/bounties/",
-    "https://osv.dev/vulnerability/",
-    # Standards / specs
-    "https://datatracker.ietf.org/doc/",
+)
+
+# Only fetch maintainer-controlled content types from GitHub repositories.
+# User-generated paths (commit/, pull/, issues/) are excluded to reduce
+# prompt injection risk from untrusted comments and issue descriptions.
+_GITHUB_ALLOWED_PATH_PREFIXES = (
+    "security/advisories/",
+    "releases/",
+    "blob/",
+    "tree/",
 )
 
 MAX_CONTENT_LENGTH = 8000
@@ -212,13 +226,27 @@ class ExternalReferenceResult(BaseToolOutput):
 
 
 def _url_matches_prefix(url: str) -> bool:
-    """Return True if url starts with, or is the slash-less form of, any allowed prefix.
+    """Return True if *url* is allowed by the prefix allowlists.
 
-    Prefixes that end with "/" act as directory boundaries: "…/cpython/" matches
-    "…/cpython/issues/1" but not "…/cpython-evil/exploit".  The ``url + "/" == p``
-    branch accepts bare repo URLs without a trailing slash (e.g. "…/cpython").
+    Non-GitHub URLs are checked against ``ALLOWED_URL_PREFIXES`` with the same
+    ``startswith`` / slash-less-form logic as before.
+
+    GitHub URLs require **two** matches: the repo must appear in
+    ``_GITHUB_REPO_PREFIXES`` **and** the path after the repo prefix must start
+    with one of the trusted content types in ``_GITHUB_ALLOWED_PATH_PREFIXES``
+    (security advisories, releases, blob, tree).  User-generated paths
+    (``commit/``, ``pull/``, ``issues/``) and bare repo URLs are rejected.
     """
-    return any(url.startswith(p) or url + "/" == p for p in ALLOWED_URL_PREFIXES)
+    if any(url.startswith(p) or url + "/" == p for p in ALLOWED_URL_PREFIXES):
+        return True
+    for repo_prefix in _GITHUB_REPO_PREFIXES:
+        if url.startswith(repo_prefix):
+            suffix = url[len(repo_prefix) :]
+            return any(
+                suffix.startswith(p) or suffix + "/" == p
+                for p in _GITHUB_ALLOWED_PATH_PREFIXES
+            )
+    return False
 
 
 def validate_url(url: str) -> bool:

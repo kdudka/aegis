@@ -5,6 +5,8 @@ from aegis_ai.toolsets.tools.external_references import (
     MAX_CONTENT_LENGTH,
     MAX_READ_BYTES,
     ExternalReferenceResult,
+    _GITHUB_ALLOWED_PATH_PREFIXES,
+    _GITHUB_REPO_PREFIXES,
     _filter_cve_org_json,
     _normalize_cve_org_url,
     _sanitize_pii,
@@ -41,15 +43,49 @@ class TestValidateUrl:
     def test_all_prefixes_are_well_formed(self):
         for prefix in ALLOWED_URL_PREFIXES:
             assert prefix.startswith("https://"), f"Must start with https://: {prefix}"
+        for prefix in _GITHUB_REPO_PREFIXES:
+            assert prefix.startswith("https://github.com/"), (
+                f"Must start with https://github.com/: {prefix}"
+            )
+            assert prefix.endswith("/"), f"Must end with /: {prefix}"
+        for prefix in _GITHUB_ALLOWED_PATH_PREFIXES:
+            assert prefix.endswith("/"), f"Must end with /: {prefix}"
 
     def test_github_unlisted_repo_blocked(self):
         assert not validate_url("https://github.com/ZeroXJacks/CVEs/issues/1")
 
     def test_github_listed_repo_allowed(self):
-        assert validate_url("https://github.com/python/cpython/issues/12345")
+        assert validate_url(
+            "https://github.com/python/cpython/security/advisories/GHSA-1234"
+        )
 
-    def test_prefix_trailing_slash_equivalence(self):
-        assert validate_url("https://github.com/python/cpython")
+    def test_github_advisory_allowed(self):
+        assert validate_url(
+            "https://github.com/tektoncd/pipeline/security/advisories/GHSA-94jr-7pqp-xhcq"
+        )
+
+    def test_github_releases_allowed(self):
+        assert validate_url("https://github.com/Mbed-TLS/mbedtls/releases/tag/v3.6.3")
+
+    def test_github_releases_bare_allowed(self):
+        assert validate_url("https://github.com/Mbed-TLS/mbedtls/releases")
+
+    def test_github_blob_allowed(self):
+        assert validate_url("https://github.com/python/cpython/blob/main/README.rst")
+
+    def test_github_commit_blocked(self):
+        assert not validate_url(
+            "https://github.com/python/cpython/commit/5858e42c539dac8394636a6e9e658c301451687"
+        )
+
+    def test_github_issue_blocked(self):
+        assert not validate_url("https://github.com/python/cpython/issues/143927")
+
+    def test_github_pull_blocked(self):
+        assert not validate_url("https://github.com/python/cpython/pull/151559")
+
+    def test_github_bare_repo_blocked(self):
+        assert not validate_url("https://github.com/python/cpython")
 
     def test_prefix_trailing_slash_prevents_substring(self):
         assert not validate_url("https://github.com/python/cpython-evil/exploit")
