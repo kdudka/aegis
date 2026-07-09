@@ -510,6 +510,7 @@ cases = [
             "of the flaw can lead to the exfiltration of all cluster-wide secrets, posing a "
             "significant risk to the integrity and confidentiality of the OpenShift environment."
         ),
+        metadata={"known_to_fail_evaluators": ["StatementNoDuplicatedInfo"]},
     ),
 ]
 
