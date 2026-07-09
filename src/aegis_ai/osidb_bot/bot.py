@@ -116,7 +116,7 @@ class FlawFinder:
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
         kwargs: dict[str, Any] = {
-            "include_fields": ["cve_id"],
+            "include_fields": ["cve_id", "classification"],
             "cve_id__isempty": False,  # only flaws with a CVE ID
             "order": ["created_dt"],
             "source_in": [s for s in ELIGIBLE_FLAWS["source"]],
@@ -152,7 +152,15 @@ class FlawFinder:
         # initiate the OSIDB search
         logger.info("searching CVEs: %s", _kwargs_for_log(kwargs))
         flaw_iterator = self.osidb.flaws.retrieve_list_iterator(**kwargs)
-        cve_ids = [flaw.cve_id for flaw in flaw_iterator]
+        cve_ids = [
+            flaw.cve_id
+            for flaw in flaw_iterator
+            if flaw.classification.to_dict()
+            in ELIGIBLE_FLAWS[
+                "classification"
+            ]  # workflow is not available as a search predicate
+        ]
+
         if state is None:
             return cve_ids
 
