@@ -106,7 +106,11 @@ class FlawFinder:
     def __init__(self, osidb: Session) -> None:
         self.osidb = osidb
 
-    def search(self, state: Optional[BotState] = None) -> Sequence[CVEID]:
+    def search(
+        self,
+        state: Optional[BotState] = None,
+        age_cutoff: Optional[datetime] = None,
+    ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
         kwargs: dict[str, Any] = {
             "include_fields": ["cve_id"],
@@ -131,9 +135,16 @@ class FlawFinder:
                 key = f"{field}_isempty"
                 kwargs[key] = True
 
-        # filter by timestamp if state file is used
-        if state is not None:
-            kwargs["created_dt_gte"] = state.created_dt
+        # compute the lower bound on created_dt
+        created_dt_gte: Optional[datetime]
+        if state is None:
+            created_dt_gte = age_cutoff
+        elif age_cutoff is None:
+            created_dt_gte = state.created_dt
+        else:
+            created_dt_gte = max(state.created_dt, age_cutoff)
+        if created_dt_gte is not None:
+            kwargs["created_dt_gte"] = created_dt_gte
 
         # initiate the OSIDB search
         logger.info("searching CVEs: %s", _kwargs_for_log(kwargs))
@@ -384,6 +395,7 @@ class Bot:
     pending: dict[BotState, bool]
     force: bool
     read_only: bool
+    age_cutoff: Optional[datetime]
 
     def __init__(
         self,
@@ -392,11 +404,13 @@ class Bot:
         *,
         force: bool = False,
         read_only: bool = False,
+        age_cutoff: Optional[datetime] = None,
     ):
         self.sfh = state_file_handler
         self.agent = agent
         self.force = force
         self.read_only = read_only
+        self.age_cutoff = age_cutoff
         self.total = 0
         self.pending = {}
         try:
@@ -411,7 +425,10 @@ class Bot:
 
     def search_cve_ids(self) -> Sequence[CVEID]:
         finder = FlawFinder(self.osidb)
-        return finder.search(state=self.sfh.read_state())
+        return finder.search(
+            state=self.sfh.read_state(),
+            age_cutoff=self.age_cutoff,
+        )
 
     async def process_cve(self, cve: CVEID) -> None:
         flaw_updater: Optional[FlawUpdater] = None

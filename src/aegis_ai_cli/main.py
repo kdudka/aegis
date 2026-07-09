@@ -31,6 +31,9 @@ else:
 
     cli_agent = rh_feature_agent
 
+# default value for `aegis osidb-bot --max-age=...`
+DEFAULT_MAX_AGE = "1y"
+
 
 @click.group()
 @click.option(
@@ -408,17 +411,39 @@ def component_intelligence(component_name):
     default=False,
     help="Skip OSIDB data updates (dry run).",
 )
+@click.option(
+    "--max-age",
+    type=str,
+    default=None,
+    help=f"Maximum flaw age, e.g. 7d (days), 4w (weeks), 5y (years). Default: {DEFAULT_MAX_AGE}.",
+)
 @click.argument("cve_ids", nargs=-1, type=CVEID)
-def osidb_bot(state_file, force, read_only, cve_ids):
+def osidb_bot(state_file, force, read_only, max_age, cve_ids):
     """
     OSIDB bot: process CVE IDs (optional) with optional state file.
     """
     # lazy import to speed up basic Aegis CLI operations
+    from pytimeparse2 import parse as parse_duration
+
     from aegis_ai.osidb_bot import Bot, StateFileHandler, logger
     from aegis_ai.osidb_bot.util import log_memory
 
     # avoid logging tracebacks when GSSAPI auth fails
     logging.getLogger("requests_gssapi").setLevel(logging.CRITICAL)
+
+    # parse --max-age and compute a cutoff datetime
+    from datetime import datetime, timedelta, timezone
+
+    age_str = max_age or DEFAULT_MAX_AGE
+    parsed = parse_duration(age_str)
+    if not isinstance(parsed, (int, float)):
+        raise click.BadParameter(
+            f"invalid duration: {age_str!r}", param_hint="--max-age"
+        )
+    age_cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=parsed)
+
+    if cve_ids and max_age is not None:
+        logger.warning("--max-age has no effect when CVE IDs are given as arguments")
 
     log_memory("cli_entry")
 
@@ -426,7 +451,9 @@ def osidb_bot(state_file, force, read_only, cve_ids):
         # this prevents multiple processes running in parallel on a single state file
         # (if state_file is not None)
         with StateFileHandler(state_file) as sfh:
-            osidb_bot = Bot(sfh, cli_agent, force=force, read_only=read_only)
+            osidb_bot = Bot(
+                sfh, cli_agent, force=force, read_only=read_only, age_cutoff=age_cutoff
+            )
             log_memory("bot_created")
             runner = osidb_bot.process(cve_ids)
             asyncio.run(runner)
