@@ -467,6 +467,12 @@ class Bot(StateProxy):
         except RuntimeError as e:
             # something has failed
             logger.warning(f"{cve}: {str(e)}")
+            if flaw_updater:
+                if (not self.retrying_failed and not self.max_retries) or (
+                    self.retrying_failed and self.retry_list.get(cve) == 1
+                ):
+                    # the last retry attempt failed, create the manual-triage label
+                    flaw_updater.create_alias_label("manual-triage")
             if self.max_retries > 0 and not self.retrying_failed:
                 self.retry_list[cve] = self.max_retries
 
