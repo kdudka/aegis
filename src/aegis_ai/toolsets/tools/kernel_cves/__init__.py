@@ -255,7 +255,10 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
     except (subprocess.CalledProcessError, FileNotFoundError):
         logger.warning("git is not installed or not in PATH. This tool cannot run.")
         return LINUXCVEToolResponse(
-            cve_id=cve_id, status="error", error_message="Failed to run tool."
+            cve_id=cve_id,
+            status="error",
+            error_message="Failed to run tool.",
+            metadata=None,
         )
 
     cache_path = Path(get_settings().config_dir) / "kernel_cves"
@@ -266,7 +269,10 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
     except subprocess.CalledProcessError:
         logger.warning("failed to setup git repo.")
         return LINUXCVEToolResponse(
-            cve_id=cve_id, status="error", error_message="Failed to setup tool."
+            cve_id=cve_id,
+            status="error",
+            error_message="Failed to setup tool.",
+            metadata=None,
         )
 
     return LINUXCVEToolResponse(
@@ -286,6 +292,7 @@ async def kernel_cve_tool(
             cve_id=input.cve_id,
             status="error",
             error_message="Not a kernel CVE; tool not applicable.",
+            metadata=None,
         )
     logger.info(f"Looking up kernel context for {input.cve_id}...")
     return await kernel_cve_lookup(input.cve_id)
