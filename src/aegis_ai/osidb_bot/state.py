@@ -5,7 +5,7 @@ import os
 from aegis_ai.osidb_bot.util import logger
 
 from datetime import datetime
-from typing import Never, Optional, Self
+from typing import Any, Never, Optional, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -142,28 +142,74 @@ class StateFileHandler:
         logger.info(f"{self._sf_prefix()}: written {state}")
 
 
+class _ObservableDict(dict):
+    """Dict subclass that calls a callback when its contents change."""
+
+    _on_change: Any
+
+    def __init__(self, *args: Any, _on_change: Any = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self._on_change = _on_change
+
+    def __setitem__(self, key: object, value: object) -> None:
+        super().__setitem__(key, value)
+        if self._on_change:
+            self._on_change()
+
+    def __delitem__(self, key: object) -> None:
+        super().__delitem__(key)
+        if self._on_change:
+            self._on_change()
+
+    def pop(self, key: object, *args: Any) -> Any:
+        if key not in self:
+            return super().pop(key, *args)
+        result = super().pop(key, *args)
+        if self._on_change:
+            self._on_change()
+        return result
+
+
 class StateProxy:
     """In-memory cache for BotState that auto-writes to disk on update."""
 
     _sfh: "StateFileHandler"
     _state: BotState
+    _retry_list: _ObservableDict
     read_only: bool
 
     def __init__(self, sfh: "StateFileHandler", read_only: bool = False):
         self._sfh = sfh
         self._state = sfh.read_state() or BotState()
+        self._retry_list = _ObservableDict(
+            self._state.retry_list, _on_change=self._flush
+        )
         self.read_only = read_only
 
     @property
     def state(self) -> BotState:
         return self._state
 
+    @property
+    def retry_list(self) -> dict[str, int]:
+        return self._retry_list
+
+    def _flush(self) -> None:
+        """Rebuild BotState from current retry_list and write to disk."""
+        self._state = BotState(
+            last_cve=self._state.last_cve,
+            created_dt=self._state.created_dt,
+            retry_list=self._retry_list,
+        )
+        if not self.read_only:
+            self._sfh.write_state(self._state)
+
     @state.setter
     def state(self, value: BotPosition) -> None:
         self._state = BotState(
             last_cve=value.last_cve,
             created_dt=value.created_dt,
-            retry_list=self._state.retry_list,
+            retry_list=self._retry_list,
         )
         if not self.read_only:
             self._sfh.write_state(self._state)

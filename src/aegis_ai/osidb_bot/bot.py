@@ -188,6 +188,7 @@ class FlawUpdater:
     cve: CVEID
     force: bool
     read_only: bool
+    retry_list: dict[str, int]
 
     # OSIDB flaw from session.flaws.retrieve()
     flaw_data: Optional[FlawData]
@@ -203,12 +204,14 @@ class FlawUpdater:
         *,
         force: bool = False,
         read_only: bool = False,
+        retry_list: Optional[dict[str, int]] = None,
     ):
         self.osidb = osidb
         self.agent = agent
         self.cve = cve
         self.force = force
         self.read_only = read_only
+        self.retry_list = retry_list or {}
         self.updated_fields = set()
 
         try:
@@ -366,6 +369,9 @@ class FlawUpdater:
                     form_data=rh_cvss,
                 )
 
+            # successfully processed (we do not retry when only label creation fails)
+            self.retry_list.pop(self.cve, None)
+
         except Exception as e:
             # failed to save changes
             all_ok = False
@@ -449,6 +455,7 @@ class Bot(StateProxy):
                 cve,
                 force=self.force,
                 read_only=self.read_only,
+                retry_list=self.retry_list,
             )
             self.pending[flaw_updater.position()] = True  # mark as pending
             await flaw_updater.do()
