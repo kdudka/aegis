@@ -405,7 +405,6 @@ class Bot:
     sfh: StateFileHandler
     agent: Agent
     osidb: Session
-    total: int
     pending: dict[BotState, bool]
     force: bool
     read_only: bool
@@ -425,7 +424,6 @@ class Bot:
         self.force = force
         self.read_only = read_only
         self.age_cutoff = age_cutoff
-        self.total = 0
         self.pending = {}
         try:
             osidb_server = get_settings().osidb_server_url
@@ -482,25 +480,26 @@ class Bot:
                 # update state file
                 self.sfh.write_state(state)
 
-    async def process_cve_bounded(self, i: int, cve: CVEID) -> None:
-        async with max_jobs_sem:
-            logger.info(f"[{i}/{self.total}] processing {cve}")
-            log_memory(f"cve_start({cve})")
-            await self.process_cve(cve)
-            log_memory(f"cve_end({cve})")
+    async def _process_cve_list(self, cve_ids: Sequence[CVEID] = ()) -> None:
+        total: int = len(cve_ids)
+
+        async def process_cve_bounded(i: int, cve: CVEID) -> None:
+            async with max_jobs_sem:
+                logger.info(f"[{i}/{total}] processing {cve}")
+                log_memory(f"cve_start({cve})")
+                await self.process_cve(cve)
+                log_memory(f"cve_end({cve})")
+
+        log_memory(f"batch_start({total} CVEs)")
+        await asyncio.gather(
+            *[process_cve_bounded(*job) for job in enumerate(cve_ids, start=1)]
+        )
+        log_memory("batch_end")
+        logger.info(f"processed {total} CVEs")
 
     async def process(self, cve_ids: Sequence[CVEID] = ()) -> None:
         if not cve_ids:
             # look for CVEs to process
             cve_ids = self.search_cve_ids()
 
-        self.total = len(cve_ids)
-        if not self.total:
-            logger.info("nothing to do")
-            return
-
-        log_memory(f"batch_start({self.total}_cves)")
-        await asyncio.gather(
-            *[self.process_cve_bounded(*job) for job in enumerate(cve_ids, start=1)]
-        )
-        log_memory("batch_end")
+        await self._process_cve_list(cve_ids)
