@@ -408,6 +408,7 @@ class Bot(StateProxy):
     pending: dict[BotPosition, bool]
     force: bool
     age_cutoff: Optional[datetime]
+    max_retries: int
     retrying_failed: bool
 
     def __init__(
@@ -418,11 +419,13 @@ class Bot(StateProxy):
         force: bool = False,
         read_only: bool = False,
         age_cutoff: Optional[datetime] = None,
+        max_retries: int = 0,
     ):
         super().__init__(state_file_handler, read_only=read_only)
         self.agent = agent
         self.force = force
         self.age_cutoff = age_cutoff
+        self.max_retries = max_retries
         self.retrying_failed = False
         self.pending = {}
         try:
@@ -461,6 +464,8 @@ class Bot(StateProxy):
         except RuntimeError as e:
             # something has failed
             logger.warning(f"{cve}: {str(e)}")
+            if self.max_retries > 0 and not self.retrying_failed:
+                self.retry_list[cve] = self.max_retries
 
         finally:
             if self.retrying_failed:
