@@ -51,8 +51,6 @@ ELIGIBLE_FLAWS = {
         {"workflow": "DEFAULT", "state": ""},
         {"workflow": "DEFAULT", "state": "NEW"},
     ),
-    # only flaws where Aegis has not been used yet
-    "aegis_meta": ({},),
     # only flaws with no affects
     "affects": ([],),
     # only flaws with no owner
@@ -133,7 +131,7 @@ class FlawFinder:
 
         # emptiness predicates for indexed fields
         for field, allowed in ELIGIBLE_FLAWS.items():
-            if field in ("affects", "aegis_meta"):
+            if field in ("affects",):
                 # not indexed in OSIDB
                 continue
 
@@ -276,7 +274,7 @@ class FlawUpdater:
             self._warn("unexpected type of aegis_meta")
             return False
 
-        # if everything is OK check that no suggestion was discarded with this timestamp
+        # if everything is OK, check that no suggestion was discarded with this timestamp
         return not any(
             entry.get("type", "") == "AI-Bot-Skipped"
             and entry.get("timestamp", None) == timestamp.isoformat()
