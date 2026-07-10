@@ -1,5 +1,5 @@
 from aegis_ai import get_settings
-from aegis_ai.osidb_bot.state import BotState, StateFileHandler, StateProxy
+from aegis_ai.osidb_bot.state import BotPosition, StateFileHandler, StateProxy
 from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST, _KERNEL_FLAGS_KEY
 from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 from aegis_ai.data_models import CVEID
@@ -111,7 +111,7 @@ class FlawFinder:
 
     def search(
         self,
-        state: BotState = BotState(),
+        state: BotPosition = BotPosition(),
         age_cutoff: Optional[datetime] = None,
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
@@ -226,9 +226,9 @@ class FlawUpdater:
     def _warn(self, msg: str) -> None:
         logger.warning(f"{self.cve}: {msg}")
 
-    def state(self) -> BotState:
+    def position(self) -> BotPosition:
         assert self.flaw_data
-        return BotState(
+        return BotPosition(
             last_cve=self.flaw_data["cve_id"],
             created_dt=datetime.fromisoformat(self.flaw_data["created_dt"]),
         )
@@ -401,7 +401,7 @@ class FlawUpdater:
 class Bot(StateProxy):
     agent: Agent
     osidb: Session
-    pending: dict[BotState, bool]
+    pending: dict[BotPosition, bool]
     force: bool
     age_cutoff: Optional[datetime]
 
@@ -447,7 +447,7 @@ class Bot(StateProxy):
                 force=self.force,
                 read_only=self.read_only,
             )
-            self.pending[flaw_updater.state()] = True  # mark as pending
+            self.pending[flaw_updater.position()] = True  # mark as pending
             await flaw_updater.do()
 
         except RuntimeError as e:
@@ -456,10 +456,10 @@ class Bot(StateProxy):
 
         finally:
             if flaw_updater:
-                self.pending[flaw_updater.state()] = False  # mark as done
+                self.pending[flaw_updater.position()] = False  # mark as done
 
             # determine the next state
-            next_state: Optional[BotState] = None
+            next_state: Optional[BotPosition] = None
             for s in sorted(self.pending.keys(), key=lambda s: s.created_dt):
                 if self.pending[s]:
                     # this CVE is still being processed

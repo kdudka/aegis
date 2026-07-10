@@ -7,15 +7,15 @@ from aegis_ai.osidb_bot.util import logger
 from datetime import datetime
 from typing import Never, Optional, Self
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aegis_ai.data_models import CVEID
 
 
-class BotState(BaseModel):
-    """State for the OSIDB bot, aligned with osidb_bindings flaw attributes."""
+class BotPosition(BaseModel):
+    """Position in the CVE stream — hashable, used as dict key in Bot.pending."""
 
-    # make the state hashable so that it can be used as key for a dict
+    # make the position hashable so that it can be used as key for a dict
     model_config = ConfigDict(frozen=True)
 
     # the last processed CVE
@@ -26,8 +26,18 @@ class BotState(BaseModel):
 
     def __str__(self) -> str:
         return (
-            f"BotState(last_cve={self.last_cve!r}, created_dt={str(self.created_dt)!r})"
+            f"BotPosition(last_cve={self.last_cve!r},"
+            f" created_dt={str(self.created_dt)!r})"
         )
+
+
+class BotState(BotPosition):
+    """Full bot state for persistence — extends BotPosition with mutable fields."""
+
+    model_config = ConfigDict(frozen=False)
+
+    # CVE IDs that failed processing, mapped to remaining retry attempts
+    retry_list: dict[str, int] = Field(default_factory=dict)
 
 
 class StateFileHandler:
@@ -119,8 +129,8 @@ class StateFileHandler:
 
         assert 0 <= self.state_fd
 
-        # serialize JSON
-        payload = state.model_dump_json() + "\n"
+        # serialize JSON (exclude_defaults omits empty retry_list)
+        payload = state.model_dump_json(exclude_defaults=True) + "\n"
         raw = payload.encode("utf-8")
 
         # write the data at the beginning of the state file
@@ -149,7 +159,11 @@ class StateProxy:
         return self._state
 
     @state.setter
-    def state(self, value: BotState) -> None:
-        self._state = value
+    def state(self, value: BotPosition) -> None:
+        self._state = BotState(
+            last_cve=value.last_cve,
+            created_dt=value.created_dt,
+            retry_list=self._state.retry_list,
+        )
         if not self.read_only:
-            self._sfh.write_state(value)
+            self._sfh.write_state(self._state)
