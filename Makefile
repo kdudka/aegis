@@ -24,7 +24,7 @@ format:
 	uv run ruff format
 
 check-type: fetch-deps
-	uvx ty check --exclude src/aegis_ai_ml
+	uv run ty check --exclude src/aegis_ai_ml
     
 check: format lint check-type
 
