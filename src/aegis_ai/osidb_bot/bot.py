@@ -1,5 +1,5 @@
 from aegis_ai import get_settings
-from aegis_ai.osidb_bot.state import BotState, StateFileHandler
+from aegis_ai.osidb_bot.state import BotState, StateFileHandler, StateProxy
 from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST, _KERNEL_FLAGS_KEY
 from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 from aegis_ai.data_models import CVEID
@@ -111,7 +111,7 @@ class FlawFinder:
 
     def search(
         self,
-        state: Optional[BotState] = None,
+        state: BotState = BotState(),
         age_cutoff: Optional[datetime] = None,
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
@@ -140,7 +140,7 @@ class FlawFinder:
 
         # compute the lower bound on created_dt
         created_dt_gte: Optional[datetime]
-        if state is None:
+        if state.created_dt is None:
             created_dt_gte = age_cutoff
         elif age_cutoff is None:
             created_dt_gte = state.created_dt
@@ -161,7 +161,7 @@ class FlawFinder:
             ]  # workflow is not available as a search predicate
         ]
 
-        if state is None:
+        if state.last_cve is None:
             return cve_ids
 
         # exclude the last processed CVE when resuming from state
@@ -398,13 +398,11 @@ class FlawUpdater:
             self.create_alias_label("manual-triage")
 
 
-class Bot:
-    sfh: StateFileHandler
+class Bot(StateProxy):
     agent: Agent
     osidb: Session
     pending: dict[BotState, bool]
     force: bool
-    read_only: bool
     age_cutoff: Optional[datetime]
 
     def __init__(
@@ -416,10 +414,9 @@ class Bot:
         read_only: bool = False,
         age_cutoff: Optional[datetime] = None,
     ):
-        self.sfh = state_file_handler
+        super().__init__(state_file_handler, read_only=read_only)
         self.agent = agent
         self.force = force
-        self.read_only = read_only
         self.age_cutoff = age_cutoff
         self.pending = {}
         try:
@@ -435,7 +432,7 @@ class Bot:
     def search_cve_ids(self) -> Sequence[CVEID]:
         finder = FlawFinder(self.osidb)
         return finder.search(
-            state=self.sfh.read_state(),
+            state=self.state,
             age_cutoff=self.age_cutoff,
         )
 
@@ -462,20 +459,20 @@ class Bot:
                 self.pending[flaw_updater.state()] = False  # mark as done
 
             # determine the next state
-            state: Optional[BotState] = None
+            next_state: Optional[BotState] = None
             for s in sorted(self.pending.keys(), key=lambda s: s.created_dt):
                 if self.pending[s]:
                     # this CVE is still being processed
                     break
 
                 # record the last _done_ CVE
-                state = s
-                del self.pending[state]
+                next_state = s
+                del self.pending[next_state]
 
-            # do not update state file if the CVE with lowest created_dt is still being processed
-            if not self.read_only and state:
-                # update state file
-                self.sfh.write_state(state)
+            # do not update state if the CVE with lowest created_dt is still being processed
+            if next_state:
+                # update state (and state file unless read-only)
+                self.state = next_state
 
     async def _process_cve_list(self, cve_ids: Sequence[CVEID] = ()) -> None:
         total: int = len(cve_ids)

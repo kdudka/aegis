@@ -19,10 +19,10 @@ class BotState(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # the last processed CVE
-    last_cve: CVEID
+    last_cve: Optional[CVEID] = None
 
     # creation timestamp of the last processed CVE
-    created_dt: datetime
+    created_dt: Optional[datetime] = None
 
     def __str__(self) -> str:
         return (
@@ -89,7 +89,7 @@ class StateFileHandler:
         """Read JSON-encoded BotState from state_fd. Returns None if file is empty."""
         if not self.state_file:
             # do nothing
-            return
+            return None
 
         # read file contents
         assert 0 <= self.state_fd
@@ -130,3 +130,26 @@ class StateFileHandler:
 
         # log a successfully written state file
         logger.info(f"{self._sf_prefix()}: written {state}")
+
+
+class StateProxy:
+    """In-memory cache for BotState that auto-writes to disk on update."""
+
+    _sfh: "StateFileHandler"
+    _state: BotState
+    read_only: bool
+
+    def __init__(self, sfh: "StateFileHandler", read_only: bool = False):
+        self._sfh = sfh
+        self._state = sfh.read_state() or BotState()
+        self.read_only = read_only
+
+    @property
+    def state(self) -> BotState:
+        return self._state
+
+    @state.setter
+    def state(self, value: BotState) -> None:
+        self._state = value
+        if not self.read_only:
+            self._sfh.write_state(value)
