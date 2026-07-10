@@ -81,6 +81,12 @@ class LINUXCVEToolResponse(BaseToolOutput):
 
     metadata: Optional[CVEMetadata] = Field(..., description="Linux CVE metadata")
 
+    @classmethod
+    def error(cls, cve_id: CVEID, error_message: str) -> "LINUXCVEToolResponse":
+        return cls(
+            cve_id=cve_id, status="error", error_message=error_message, metadata=None
+        )
+
 
 # --- Repository Management (Thread-Safe) ---
 class KernelVulnsRepo:
@@ -254,12 +260,7 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
         subprocess.run(["git", "--version"], check=True, capture_output=True)
     except (subprocess.CalledProcessError, FileNotFoundError):
         logger.warning("git is not installed or not in PATH. This tool cannot run.")
-        return LINUXCVEToolResponse(
-            cve_id=cve_id,
-            status="error",
-            error_message="Failed to run tool.",
-            metadata=None,
-        )
+        return LINUXCVEToolResponse.error(cve_id, "Failed to run tool.")
 
     cache_path = Path(get_settings().config_dir) / "kernel_cves"
     repo = KernelVulnsRepo(cache_path)
@@ -268,12 +269,7 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
         repo.setup()
     except subprocess.CalledProcessError:
         logger.warning("failed to setup git repo.")
-        return LINUXCVEToolResponse(
-            cve_id=cve_id,
-            status="error",
-            error_message="Failed to setup tool.",
-            metadata=None,
-        )
+        return LINUXCVEToolResponse.error(cve_id, "Failed to setup tool.")
 
     return LINUXCVEToolResponse(
         cve_id=cve_id,
@@ -288,11 +284,8 @@ async def kernel_cve_tool(
     """Looks up a Linux kernel CVE definition by its ID and returns structured data,
     including related commit hashes and affected files."""
     if not ctx.deps.is_kernel_cve:
-        return LINUXCVEToolResponse(
-            cve_id=input.cve_id,
-            status="error",
-            error_message="Not a kernel CVE; tool not applicable.",
-            metadata=None,
+        return LINUXCVEToolResponse.error(
+            input.cve_id, "Not a kernel CVE; tool not applicable."
         )
     logger.info(f"Looking up kernel context for {input.cve_id}...")
     return await kernel_cve_lookup(input.cve_id)
