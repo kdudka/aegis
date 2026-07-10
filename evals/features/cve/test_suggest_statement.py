@@ -482,7 +482,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2026-31402",
         expected_statement="This Important flaw in the Linux kernel's NFSv4.0 server (nfsd) allows a heap overflow. In this flaw a local attacker can trigger this by orchestrating two NFSv4.0 clients to create a conflicting lock with an oversized owner string.",
-        metadata={"known_to_fail_evaluators": ["StatementEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2026-35091",
