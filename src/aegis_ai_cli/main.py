@@ -417,8 +417,14 @@ def component_intelligence(component_name):
     default=None,
     help=f"Maximum flaw age, e.g. 7d (days), 4w (weeks), 5y (years). Default: {DEFAULT_MAX_AGE}.",
 )
+@click.option(
+    "--max-retries",
+    type=int,
+    default=0,
+    help="Number of retry attempts for failed CVEs. Default: 0 (no retries).",
+)
 @click.argument("cve_ids", nargs=-1, type=CVEID)
-def osidb_bot(state_file, force, read_only, max_age, cve_ids):
+def osidb_bot(state_file, force, read_only, max_age, max_retries, cve_ids):
     """
     OSIDB bot: process CVE IDs (optional) with optional state file.
     """
@@ -445,6 +451,11 @@ def osidb_bot(state_file, force, read_only, max_age, cve_ids):
     if cve_ids and max_age is not None:
         logger.warning("--max-age has no effect when CVE IDs are given as arguments")
 
+    if max_retries > 1 and state_file is None:
+        logger.warning(
+            "--max-retries > 1 without --state-file: retry list will not persist across runs"
+        )
+
     log_memory("cli_entry")
 
     try:
@@ -452,7 +463,12 @@ def osidb_bot(state_file, force, read_only, max_age, cve_ids):
         # (if state_file is not None)
         with StateFileHandler(state_file) as sfh:
             osidb_bot = Bot(
-                sfh, cli_agent, force=force, read_only=read_only, age_cutoff=age_cutoff
+                sfh,
+                cli_agent,
+                force=force,
+                read_only=read_only,
+                age_cutoff=age_cutoff,
+                max_retries=max_retries,
             )
             log_memory("bot_created")
             runner = osidb_bot.process(cve_ids)
