@@ -408,6 +408,7 @@ class Bot(StateProxy):
     pending: dict[BotPosition, bool]
     force: bool
     age_cutoff: Optional[datetime]
+    retrying_failed: bool
 
     def __init__(
         self,
@@ -422,6 +423,7 @@ class Bot(StateProxy):
         self.agent = agent
         self.force = force
         self.age_cutoff = age_cutoff
+        self.retrying_failed = False
         self.pending = {}
         try:
             osidb_server = get_settings().osidb_server_url
@@ -452,7 +454,8 @@ class Bot(StateProxy):
                 read_only=self.read_only,
                 retry_list=self.retry_list,
             )
-            self.pending[flaw_updater.position()] = True  # mark as pending
+            if not self.retrying_failed:
+                self.pending[flaw_updater.position()] = True  # mark as pending
             await flaw_updater.do()
 
         except RuntimeError as e:
@@ -460,7 +463,9 @@ class Bot(StateProxy):
             logger.warning(f"{cve}: {str(e)}")
 
         finally:
-            if flaw_updater:
+            if self.retrying_failed:
+                self.decrement_retry(cve)
+            elif flaw_updater:
                 self.pending[flaw_updater.position()] = False  # mark as done
 
             # determine the next state
@@ -477,6 +482,7 @@ class Bot(StateProxy):
             # do not update state if the CVE with lowest created_dt is still being processed
             if next_state:
                 # update state (and state file unless read-only)
+                assert not self.retrying_failed
                 self.state = next_state
 
     async def _process_cve_list(self, cve_ids: Sequence[CVEID] = ()) -> None:
@@ -502,3 +508,8 @@ class Bot(StateProxy):
             cve_ids = self.search_cve_ids()
 
         await self._process_cve_list(cve_ids)
+
+        if self.retry_list:
+            logger.info("retrying failed CVEs")
+            self.retrying_failed = True
+            await self._process_cve_list(list(self.retry_list))

@@ -194,6 +194,17 @@ class StateProxy:
     def retry_list(self) -> dict[str, int]:
         return self._retry_list
 
+    def decrement_retry(self, cve: str) -> None:
+        """Decrement the retry count for a CVE, removing it when it reaches zero."""
+        if cve not in self._retry_list:
+            return
+
+        remains = self._retry_list[cve] - 1
+        if remains <= 0:
+            self._retry_list.pop(cve)
+        else:
+            self._retry_list[cve] = remains
+
     def _flush(self) -> None:
         """Rebuild BotState from current retry_list and write to disk."""
         self._state = BotState(
