@@ -448,6 +448,20 @@ class Bot(StateProxy):
             age_cutoff=self.age_cutoff,
         )
 
+    def schedule_retry(self, cve: CVEID) -> bool:
+        if self.retrying_failed:
+            # already retrying -> create the manual-triage label on the last retry
+            remains = self.retry_list.get(cve)
+            return remains is not None and remains > 1
+
+        if not self.max_retries:
+            # not retrying and retry is disabled
+            return False
+
+        # not yet retrying but retry is enabled -> schedule retry
+        self.retry_list[cve] = self.max_retries
+        return True
+
     async def process_cve(self, cve: CVEID) -> None:
         flaw_updater: Optional[FlawUpdater] = None
 
@@ -467,14 +481,11 @@ class Bot(StateProxy):
         except RuntimeError as e:
             # something has failed
             logger.warning(f"{cve}: {str(e)}")
-            if flaw_updater:
-                if (not self.retrying_failed and not self.max_retries) or (
-                    self.retrying_failed and self.retry_list.get(cve) == 1
-                ):
-                    # the last retry attempt failed, create the manual-triage label
-                    flaw_updater.create_alias_label("manual-triage")
-            if self.max_retries > 0 and not self.retrying_failed:
-                self.retry_list[cve] = self.max_retries
+
+            # schedule retry if enabled
+            if not self.schedule_retry(cve) and flaw_updater:
+                # the last retry attempt failed, create the manual-triage label
+                flaw_updater.create_alias_label("manual-triage")
 
         finally:
             if self.retrying_failed:
