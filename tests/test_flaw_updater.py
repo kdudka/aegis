@@ -564,3 +564,36 @@ async def test_flaw_updater_do_creates_manual_triage_label_on_save_failure(
         flaw_id=flaw_data["uuid"],
         form_data=MANUAL_TRIAGE_LABEL,
     )
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_schedule_retry_creates_manual_triage_on_last_attempt(mock_exec_feature):
+    """process_cve() creates manual-triage label when the last retry attempt fails."""
+    mock_exec_feature.side_effect = _canned_exec_feature
+
+    flaw_data = _minimal_flaw_data()
+    session = _mock_session(flaw_data)
+    session.flaws.update.side_effect = RuntimeError("OSIDB write failed")
+    agent = MagicMock()
+
+    from aegis_ai.osidb_bot.bot import Bot
+    from aegis_ai.osidb_bot.state import StateFileHandler
+
+    with (
+        StateFileHandler(None) as sfh,
+        patch(
+            "aegis_ai.osidb_bot.bot.osidb_bindings.new_session", return_value=session
+        ),
+    ):
+        bot = Bot(sfh, agent, max_retries=1)
+        bot.retrying_failed = True
+        bot.retry_list[CVE_ID] = 1
+
+        await bot.process_cve(CVE_ID)
+
+    session.flaws.labels.create.assert_called_with(
+        flaw_id=flaw_data["uuid"],
+        form_data=MANUAL_TRIAGE_LABEL,
+    )
+    assert CVE_ID not in bot.retry_list
