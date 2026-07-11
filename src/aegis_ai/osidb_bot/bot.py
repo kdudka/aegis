@@ -187,6 +187,7 @@ class FlawUpdater:
     force: bool
     read_only: bool
     retry_list: dict[str, int]
+    on_failure: Any
 
     # OSIDB flaw from session.flaws.retrieve()
     flaw_data: Optional[FlawData]
@@ -203,6 +204,7 @@ class FlawUpdater:
         force: bool = False,
         read_only: bool = False,
         retry_list: Optional[dict[str, int]] = None,
+        on_failure: Any = None,
     ):
         self.osidb = osidb
         self.agent = agent
@@ -210,6 +212,7 @@ class FlawUpdater:
         self.force = force
         self.read_only = read_only
         self.retry_list = retry_list or {}
+        self.on_failure = on_failure
         self.updated_fields = set()
 
         try:
@@ -372,7 +375,7 @@ class FlawUpdater:
 
         except Exception as e:
             # failed to save changes
-            all_ok = False
+            all_ok = self.on_failure(self.cve) if self.on_failure else False
 
             msg_suffix = f"({e.__class__.__name__})"
             if flaw_saved:
@@ -473,6 +476,7 @@ class Bot(StateProxy):
                 force=self.force,
                 read_only=self.read_only,
                 retry_list=self.retry_list,
+                on_failure=self.schedule_retry,
             )
             if not self.retrying_failed:
                 self.pending[flaw_updater.position()] = True  # mark as pending
