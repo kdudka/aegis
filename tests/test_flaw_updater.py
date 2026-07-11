@@ -597,3 +597,30 @@ async def test_schedule_retry_creates_manual_triage_on_last_attempt(mock_exec_fe
         form_data=MANUAL_TRIAGE_LABEL,
     )
     assert CVE_ID not in bot.retry_list
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_validation_failure_skips_retry_and_manual_triage(mock_exec_feature):
+    """process_cve() does not retry or label manual-triage for ineligible flaws."""
+    mock_exec_feature.side_effect = _canned_exec_feature
+
+    flaw_data = _minimal_flaw_data()
+    flaw_data["owner"] = "someone@example.com"
+    session = _mock_session(flaw_data)
+    agent = MagicMock()
+
+    from aegis_ai.osidb_bot.bot import Bot
+    from aegis_ai.osidb_bot.state import StateFileHandler
+
+    with (
+        StateFileHandler(None) as sfh,
+        patch(
+            "aegis_ai.osidb_bot.bot.osidb_bindings.new_session", return_value=session
+        ),
+    ):
+        bot = Bot(sfh, agent, max_retries=3)
+        await bot.process_cve(CVE_ID)
+
+    assert CVE_ID not in bot.retry_list
+    session.flaws.labels.create.assert_not_called()
