@@ -24,12 +24,6 @@ class BotPosition(BaseModel):
     # creation timestamp of the last processed CVE
     created_dt: Optional[datetime] = None
 
-    def __str__(self) -> str:
-        return (
-            f"BotPosition(last_cve={self.last_cve!r},"
-            f" created_dt={str(self.created_dt)!r})"
-        )
-
 
 class BotState(BotPosition):
     """Full bot state for persistence — extends BotPosition with mutable fields."""
@@ -112,7 +106,7 @@ class StateFileHandler:
         # parse JSON
         try:
             state = BotState.model_validate_json(data)
-            logger.info(f"{self._sf_prefix()}: read {state}")
+            logger.debug(f"{self._sf_prefix()}: read {state.model_dump_json()}")
             return state
         except (ValidationError, json.JSONDecodeError):
             logger.warning(
@@ -139,7 +133,7 @@ class StateFileHandler:
         os.ftruncate(self.state_fd, size)
 
         # log a successfully written state file
-        logger.info(f"{self._sf_prefix()}: written {state}")
+        logger.debug(f"{self._sf_prefix()}: written {state.model_dump_json()}")
 
 
 class _ObservableDict(dict):
@@ -152,12 +146,18 @@ class _ObservableDict(dict):
         self._on_change = _on_change
 
     def __setitem__(self, key: object, value: object) -> None:
+        old = self.get(key)
         super().__setitem__(key, value)
+        if old is None:
+            logger.info("retry_list: added %s (%s attempts)", key, value)
+        elif old != value:
+            logger.info("retry_list: updated %s (%s → %s attempts)", key, old, value)
         if self._on_change:
             self._on_change()
 
     def __delitem__(self, key: object) -> None:
         super().__delitem__(key)
+        logger.info("retry_list: removed %s (%d entries remain)", key, len(self))
         if self._on_change:
             self._on_change()
 
@@ -165,6 +165,7 @@ class _ObservableDict(dict):
         if key not in self:
             return super().pop(key, *args)
         result = super().pop(key, *args)
+        logger.info("retry_list: removed %s (%d entries remain)", key, len(self))
         if self._on_change:
             self._on_change()
         return result
@@ -185,6 +186,7 @@ class StateProxy:
             self._state.retry_list, _on_change=self._flush
         )
         self.read_only = read_only
+        self._log_position("read")
 
     @property
     def state(self) -> BotState:
@@ -193,6 +195,15 @@ class StateProxy:
     @property
     def retry_list(self) -> dict[str, int]:
         return self._retry_list
+
+    def _log_position(self, action: str) -> None:
+        logger.info(
+            "state %s: last_cve=%s, created_dt=%s, len(retry_list)=%d",
+            action,
+            self._state.last_cve,
+            self._state.created_dt,
+            len(self._retry_list),
+        )
 
     def decrement_retry(self, cve: str) -> None:
         """Decrement the retry count for a CVE, removing it when it reaches zero."""
@@ -224,3 +235,4 @@ class StateProxy:
         )
         if not self.read_only:
             self._sfh.write_state(self._state)
+        self._log_position("written")
