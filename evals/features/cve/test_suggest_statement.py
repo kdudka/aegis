@@ -429,6 +429,7 @@ cases = [
             "known_to_fail_evaluators": [
                 "MitigationWellFormedCommands",
                 "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
             ]
         },
     ),
