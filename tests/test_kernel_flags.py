@@ -136,6 +136,7 @@ async def _canned_exec_feature_with_flags(feature, flaw_data):
             explanation="test",
             data_quality=0.9,
             confidence=0.9,
+            tools_used=[],
         )
     if name == "SuggestDescriptionText":
         return SimpleNamespace(
@@ -144,6 +145,7 @@ async def _canned_exec_feature_with_flags(feature, flaw_data):
             explanation="test",
             data_quality=0.9,
             confidence=0.9,
+            tools_used=[],
         )
     if name == "SuggestCWE":
         return SimpleNamespace(
@@ -151,6 +153,7 @@ async def _canned_exec_feature_with_flags(feature, flaw_data):
             explanation="test",
             data_quality=0.9,
             confidence=0.9,
+            tools_used=[],
         )
     if name == "SuggestImpact":
         return SimpleNamespace(
@@ -160,6 +163,7 @@ async def _canned_exec_feature_with_flags(feature, flaw_data):
             explanation="Kernel panic detected",
             data_quality=0.9,
             confidence=0.9,
+            tools_used=[],
             _flags=["kpanic"],
         )
     raise ValueError(f"Unknown feature: {name}")
@@ -325,6 +329,7 @@ class TestSuggestImpactAegisMetaKernelFlags:
                     explanation="test",
                     data_quality=0.9,
                     confidence=0.9,
+                    tools_used=[],
                     _flags=[],
                 )
             return await _canned_exec_feature_with_flags(feature, flaw_data)

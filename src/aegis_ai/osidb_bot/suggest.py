@@ -77,6 +77,7 @@ def record_aegis_meta(
         "timestamp": timestamp.isoformat(),
         "data_quality": output.data_quality,
         "confidence": output.confidence,
+        "tools_used": output.tools_used,
         **extra,
     }
     dst_field.append(entry)
