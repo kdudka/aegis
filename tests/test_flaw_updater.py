@@ -69,7 +69,7 @@ async def _canned_exec_feature(feature, flaw_data):
     cve_id = flaw_data["cve_id"]
     explanation = f"Canned explanation for {name} ({cve_id})"
 
-    metrics = dict(data_quality=1.0, confidence=1.0)
+    metrics = dict(data_quality=1.0, confidence=1.0, tools_used=[])
 
     if name == "SuggestAffectedComponents":
         return SimpleNamespace(
@@ -293,6 +293,7 @@ def test_update_field_skipped_low_data_quality():
             explanation="test",
             data_quality=LOW_QUALITY,
             confidence=1.0,
+            tools_used=[],
         ),
     )
 
@@ -323,6 +324,7 @@ def test_update_field_skipped_low_confidence():
             explanation="test",
             data_quality=1.0,
             confidence=LOW_CONFIDENCE,
+            tools_used=[],
         ),
     )
 
@@ -350,6 +352,7 @@ def test_update_field_skipped_both_metrics_low():
             explanation="test",
             data_quality=LOW_QUALITY,
             confidence=LOW_CONFIDENCE,
+            tools_used=[],
         ),
     )
 
@@ -374,7 +377,9 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
         name = feature.__class__.__name__
         cve_id = flaw_data["cve_id"]
         explanation = f"Low-quality output for {name} ({cve_id})"
-        metrics = dict(data_quality=LOW_QUALITY, confidence=LOW_CONFIDENCE)
+        metrics = dict(
+            data_quality=LOW_QUALITY, confidence=LOW_CONFIDENCE, tools_used=[]
+        )
 
         if name == "SuggestAffectedComponents":
             return SimpleNamespace(
@@ -465,7 +470,9 @@ async def test_flaw_updater_do_creates_manual_triage_label_on_all_skipped(
     async def _low_metrics_exec(feature, flaw_data):
         name = feature.__class__.__name__
         explanation = f"Low-quality output for {name}"
-        metrics = dict(data_quality=LOW_QUALITY, confidence=LOW_CONFIDENCE)
+        metrics = dict(
+            data_quality=LOW_QUALITY, confidence=LOW_CONFIDENCE, tools_used=[]
+        )
 
         if name == "SuggestAffectedComponents":
             return SimpleNamespace(
