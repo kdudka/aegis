@@ -543,4 +543,7 @@ class Bot(StateProxy):
         if self.retry_list:
             logger.info("retrying failed CVEs")
             self.retrying_failed = True
-            await self._process_cve_list(list(self.retry_list))
+
+            # sort the list such that CVEs with fewer remaining retry attempts are processed first
+            retry_cves = sorted(self.retry_list, key=self.retry_list.__getitem__)
+            await self._process_cve_list(retry_cves)
