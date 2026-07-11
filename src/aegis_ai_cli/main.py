@@ -437,6 +437,11 @@ def osidb_bot(state_file, force, read_only, max_age, max_retries, cve_ids):
     # avoid logging tracebacks when GSSAPI auth fails
     logging.getLogger("requests_gssapi").setLevel(logging.CRITICAL)
 
+    # suppress verbose tool call logs
+    from aegis_ai import SuppressToolCallFilter
+
+    logging.getLogger("aegis_ai.toolsets").addFilter(SuppressToolCallFilter())
+
     # parse --max-age and compute a cutoff datetime
     from datetime import datetime, timedelta, timezone
 
