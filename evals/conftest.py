@@ -151,18 +151,11 @@ def setup_logging_for_session():
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
     # Suppress the "[tool call] ..." logs ONLY during eval runs
-    class _SuppressToolCallFilter(logging.Filter):
-        def filter(self, record: logging.LogRecord) -> bool:
-            try:
-                msg = record.getMessage()
-            except Exception:
-                return True
-            return not msg.startswith("[tool call] ")
-
-    # Skip suppression of logged tool during evals if user explicitly enables
-    #  verbose logging via env var
+    # Skip suppression if user explicitly enables verbose logging via env var
     if not os.getenv("AEGIS_LOGGING_EVALS_VERBOSE"):
-        logging.getLogger("aegis_ai.toolsets").addFilter(_SuppressToolCallFilter())
+        from aegis_ai import SuppressToolCallFilter
+
+        logging.getLogger("aegis_ai.toolsets").addFilter(SuppressToolCallFilter())
 
 
 # Cache OSIDB responses (maintained in git) so evals are invariant to
