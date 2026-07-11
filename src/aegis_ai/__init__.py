@@ -133,6 +133,17 @@ class LivenessProbeLogFilter(logging.Filter):
         return args[1:] != ("GET", "/healthz", "1.1", 204)
 
 
+class SuppressToolCallFilter(logging.Filter):
+    """Suppress verbose '[tool call] ...' log lines from toolset loggers."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return not msg.startswith("[tool call] ")
+
+
 class SuppressThirdPartyTracebackFilter(logging.Filter):
     """
     Remove exception tracebacks from selected third-party loggers (Kerberos/GSSAPI)
