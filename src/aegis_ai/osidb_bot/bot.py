@@ -18,6 +18,10 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Sequence, cast
 
 
+class FlawValidationError(RuntimeError):
+    """Raised when a flaw fails eligibility validation."""
+
+
 ELIGIBLE_FLAWS = {
     # only flaws coming from the following sources
     "source": (
@@ -174,7 +178,7 @@ class FlawFinder:
 
             short_value = textwrap.shorten(str(value), width=64, placeholder=" [...]")
             msg = f'skipped because {field}="{short_value}", allowed={allowed}'
-            raise RuntimeError(msg)
+            raise FlawValidationError(msg)
 
 
 class FlawUpdater:
@@ -485,8 +489,12 @@ class Bot(StateProxy):
             # something has failed
             logger.warning(f"{cve}: {str(e)}")
 
-            # schedule retry if enabled
-            if not self.schedule_retry(cve) and flaw_updater:
+            # schedule retry if enabled (but not for validation failures)
+            if (
+                not isinstance(e, FlawValidationError)
+                and not self.schedule_retry(cve)
+                and flaw_updater
+            ):
                 # the last retry attempt failed, create the manual-triage label
                 flaw_updater.create_alias_label("manual-triage")
 
