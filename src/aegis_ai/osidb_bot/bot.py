@@ -338,6 +338,8 @@ class FlawUpdater:
             if self.force:
                 self._warn(f"bypassing flaw eligibility check: {str(e)}")
             else:
+                # proactively remove ineligible CVEs from retry_list
+                self.retry_list.pop(self.cve, None)
                 raise
 
         # apply suggestions
