@@ -57,6 +57,9 @@ aegis = "aegis_ai_cli.main:aegis_cli"
 requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
+[tool.uv]
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+
 [tool.hatch.version]
 source = "vcs"
 
