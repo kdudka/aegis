@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-07-13
+
+### Changed
+- overhauled kernel CVE impact classifier training pipeline with improved feature extraction, data preparation, and model evaluation
+- `external_references_tool` now uses URL prefix matching with per-repo granularity and path-level filtering for GitHub URLs
+
+### Added
+- `osidb-bot` now creates `kpanic` labels from kernel classifier flags
+- `osidb-bot` now creates a `manual-triage` label on failure or when suggestions are discarded
+- added `--max-age` option to `osidb-bot` to limit flaw search window (defaults to 1 year)
+- added `suggest-description` evaluation cases for 8 CVEs
+
+### Fixed
+- `suggest-description` now suppresses CWE mentions in suggested descriptions
+- `osidb-bot` now filters flaws by `classification` client-side in `FlawFinder.search()`
+- `osidb-bot` now processes flaws with empty workflow state again
+- `osidb-bot` now implements failure recovery in `apply_suggestions()` and always writes `aegis_meta`
+- added 30s aggregate timeout for external reference fetches
+- fixed missing `metadata` argument in `LINUXCVEToolResponse` error paths
+- improved eval judges to prevent hallucinated CWE names and correctly distinguish attack vector from exploit availability
+
+
 ## [0.7.5] - 2026-06-26
 
 ### Changed
