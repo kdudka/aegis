@@ -44,7 +44,14 @@ from . import (
     web_feature_agent,
     ENABLE_CONSOLE,
 )
-from .data_models import Feedback, ProgrammaticFeedback, FeatureKPI
+from .data_models import (
+    CVEMultiAnalysisRequest,
+    CVEMultiAnalysisResponse,
+    Feedback,
+    FeatureError,
+    FeatureKPI,
+    ProgrammaticFeedback,
+)
 from .endpoints.kpi import get_cve_kpi, SortOrder
 from .feedback_logger import feedback_logger, programmatic_feedback_logger
 from .semantic_scoring import (
@@ -315,11 +322,78 @@ cve_feature_registry: Dict[str, Type] = {
     "cvss-diff-explainer": cve.CVSSDiffExplainer,
     "quality-review": cve.QualityReview,
 }
+DEFAULT_CVE_FEATURES = [
+    "suggest-impact",
+    "suggest-cwe",
+    "suggest-description",
+    "suggest-statement",
+    "suggest-affected-components",
+]
+
 CVEFeatureName = Enum(
     "CVEFeatureName",
     {name: name for name in cve_feature_registry.keys()},
     type=str,
 )
+
+
+async def _maybe_infer_components(
+    cve_id: str,
+    validated_input: dict,
+    skip_inference: bool = False,
+) -> dict:
+    """Conditionally run SuggestAffectedComponents and return enriched context."""
+    if skip_inference:
+        return validated_input
+
+    existing_components = validated_input.get("components") or []
+    description_text = (
+        validated_input.get("comment_zero")
+        or validated_input.get("cve_description")
+        or validated_input.get("description")
+    ) or ""
+    if not existing_components and validated_input.get("title") and description_text:
+        try:
+            sac_instance = cve.SuggestAffectedComponents(agent=llm_agent)
+            sac_result = await sac_instance.exec(cve_id, static_context=validated_input)
+            return {
+                **validated_input,
+                "components": sac_result.output.components,
+            }
+        except Exception as e:
+            logging.warning(
+                "SuggestAffectedComponents failed for CVE %s: %s",
+                cve_id,
+                e,
+            )
+
+    return validated_input
+
+
+def _map_feature_error(exc: Exception, feature_name: str) -> FeatureError:
+    """Map an exception from a feature execution to a FeatureError."""
+    if isinstance(exc, OSIDBFlawNotFoundError):
+        return FeatureError(
+            error="OSIDBFlawNotFoundError",
+            detail=f"No flaw data found in OSIDB for {exc.cve_id}.",
+        )
+    if isinstance(exc, OSIDBUnauthorizedError):
+        log_exception_safely(exc, f"OSIDB auth failure for CVE feature '{feature_name}'")
+        return FeatureError(
+            error="OSIDBUnauthorizedError",
+            detail="OSIDB authentication failed (HTTP 401).",
+        )
+    if isinstance(exc, OSIDBAuthError):
+        log_exception_safely(exc, f"OSIDB auth error for CVE feature '{feature_name}'")
+        return FeatureError(
+            error="OSIDBAuthError",
+            detail="OSIDB authentication service is unavailable.",
+        )
+    log_exception_safely(exc, f"Error executing CVE feature '{feature_name}'")
+    return FeatureError(
+        error=type(exc).__name__,
+        detail=f"An internal error occurred while executing CVE feature '{feature_name}'.",
+    )
 
 
 @app.get(
@@ -364,6 +438,79 @@ async def cve_analysis(feature: CVEFeatureName, cve_id: CVEID, detail: bool = Fa
 
 
 @app.post(
+    f"/api/{AEGIS_REST_API_VERSION}/analysis/cve",
+    response_class=JSONResponse,
+    response_model=CVEMultiAnalysisResponse,
+)
+async def cve_multi_analysis(
+    request_body: CVEMultiAnalysisRequest, detail: bool = False
+):
+    cve_id = request_body.cve_id
+    requested_features = request_body.features
+    if not requested_features:
+        requested_features = list(DEFAULT_CVE_FEATURES)
+    else:
+        invalid = [f for f in requested_features if f not in cve_feature_registry]
+        if invalid:
+            valid = list(cve_feature_registry.keys())
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown feature(s): {invalid}. Valid features: {valid}",
+            )
+
+        # deduplicate to avoid redundant LLM calls from repeated feature names
+        requested_features = list(dict.fromkeys(requested_features))
+
+    validated_input: dict[str, Any] = {"cve_id": cve_id}
+    if request_body.model_extra:
+        validated_input.update(request_body.model_extra)
+
+    results: Dict[str, Any] = {}
+    errors: Dict[str, FeatureError] = {}
+
+    sac_name = "suggest-affected-components"
+    sac_requested = sac_name in requested_features
+    existing_components = validated_input.get("components") or []
+
+    if sac_requested and not existing_components:
+        # Run SAC first so its inferred components are available to sibling features
+        try:
+            sac_instance = cve.SuggestAffectedComponents(agent=llm_agent)
+            sac_result = await sac_instance.exec(cve_id, static_context=validated_input)
+            results[sac_name] = sac_result if detail else sac_result.output
+            validated_input = {
+                **validated_input,
+                "components": sac_result.output.components,
+            }
+        except Exception as exc:
+            results[sac_name] = None
+            errors[sac_name] = _map_feature_error(exc, sac_name)
+        remaining_features = [f for f in requested_features if f != sac_name]
+    else:
+        enriched_input = await _maybe_infer_components(cve_id, validated_input)
+        validated_input = enriched_input
+        remaining_features = list(requested_features)
+
+    async def _run_feature(feature_name: str) -> Any:
+        FeatureClass = cve_feature_registry[feature_name]
+        feature_instance = FeatureClass(agent=llm_agent)
+        result = await feature_instance.exec(cve_id, static_context=validated_input)
+        return result if detail else result.output
+
+    tasks = [_run_feature(name) for name in remaining_features]
+    outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+
+    for feature_name, outcome in zip(remaining_features, outcomes):
+        if isinstance(outcome, Exception):
+            results[feature_name] = None
+            errors[feature_name] = _map_feature_error(outcome, feature_name)
+        else:
+            results[feature_name] = outcome
+
+    return CVEMultiAnalysisResponse(results=results, errors=errors)
+
+
+@app.post(
     f"/api/{AEGIS_REST_API_VERSION}/analysis/cve/{{feature}}",
     response_class=JSONResponse,
 )
@@ -388,32 +535,11 @@ async def cve_analysis_with_body(
         log_exception_safely(e, msg)
         raise HTTPException(status_code=422, detail=msg)
 
-    # When OSIM did not provide components but we have title and body text,
-    # populate via SuggestAffectedComponents. Skip when suggest-affected-components
-    # is the requested feature (would run twice otherwise).
-    existing_components = validated_input.get("components") or []
-    description_text = (
-        validated_input.get("comment_zero") or validated_input.get("cve_description")
-    ) or ""
-    if (
-        feature_name != "suggest-affected-components"
-        and not existing_components
-        and validated_input.get("title")
-        and description_text
-    ):
-        try:
-            sac_instance = cve.SuggestAffectedComponents(agent=llm_agent)
-            sac_result = await sac_instance.exec(cve_id, static_context=validated_input)
-            validated_input = {
-                **validated_input,
-                "components": sac_result.output.components,
-            }
-        except Exception as e:
-            logging.warning(
-                "SuggestAffectedComponents failed for CVE %s: %s",
-                cve_id,
-                e,
-            )
+    validated_input = await _maybe_infer_components(
+        cve_id,
+        validated_input,
+        skip_inference=(feature_name == "suggest-affected-components"),
+    )
 
     try:
         feature_instance = FeatureClass(agent=llm_agent)

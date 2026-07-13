@@ -6,11 +6,37 @@ including the Pydantic model for API requests and the canonical schema for loggi
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 from aegis_ai.data_models import CVEID
+
+
+class FeatureError(BaseModel):
+    error: str = Field(..., description="Exception class name")
+    detail: str = Field(..., description="Human-readable error message")
+
+
+class CVEMultiAnalysisRequest(BaseModel):
+    model_config = {"extra": "allow"}
+
+    cve_id: CVEID = Field(..., description="CVE identifier (e.g. CVE-2025-12345)")
+    features: Optional[List[str]] = Field(
+        default=None,
+        description="Feature names to run. If omitted or empty, a default set of stable features is run.",
+    )
+
+
+class CVEMultiAnalysisResponse(BaseModel):
+    results: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Feature name to output model (or null on failure).",
+    )
+    errors: Dict[str, FeatureError] = Field(
+        default_factory=dict,
+        description="Feature name to error detail (only for failures).",
+    )
 
 
 class Feedback(BaseModel):
