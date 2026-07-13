@@ -421,7 +421,9 @@ class SuggestImpact(Feature):
             if isinstance(static_context, dict):
                 components = static_context.get("components") or []
 
-            if not components:
+            # Only fetch from OSIDB directly when the agent has the OSIDB
+            # toolset; otherwise let the LLM call it through its own tools.
+            if not components and self.agent.name == "RHFeatureAgent":
                 cve_data = await osidb_tool.cve_retrieve(cve_id)
                 components = cve_data.components
                 resolved_static_context = cve_data.model_dump()
