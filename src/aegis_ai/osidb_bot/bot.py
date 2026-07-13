@@ -47,6 +47,7 @@ ELIGIBLE_FLAWS = {
     ),
     # only flaws in the empty/NEW states
     "classification": (
+        {"workflow": "", "state": ""},
         {"workflow": "DEFAULT", "state": ""},
         {"workflow": "DEFAULT", "state": "NEW"},
     ),
