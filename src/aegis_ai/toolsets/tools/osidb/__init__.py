@@ -93,6 +93,34 @@ class CVE(BaseToolOutput):
     )
 
 
+# derived from `CVE.model_fields`, excludes identity and base-class fields
+_CVE_DATA_FIELDS = frozenset(CVE.model_fields) - {"cve_id", "status", "error_message"}
+
+
+def _has_sufficient_static_context(ctx: Dict[str, Any]) -> bool:
+    """True when *ctx* carries enough data to skip the OSIDB API call."""
+    has_title = bool(ctx.get("title"))
+    has_description = bool(
+        ctx.get("comment_zero") or ctx.get("cve_description") or ctx.get("description")
+    )
+    return has_title and has_description
+
+
+def _apply_static_overrides(cve: CVE, ctx: Dict[str, Any]) -> CVE:
+    """Override *cve* fields with non-empty values from *ctx* (request takes precedence)."""
+    overrides: dict[str, Any] = {}
+    for field in _CVE_DATA_FIELDS:
+        value = ctx.get(field)
+        # OSIM sends "cve_description" instead of "description"
+        if not value and field == "description":
+            value = ctx.get("cve_description")
+        if value:
+            overrides[field] = value
+    if overrides:
+        return CVE.model_validate({**cve.model_dump(), **overrides})
+    return cve
+
+
 def _cve_from_static_context(cve_id: CVEID, ctx: Dict[str, Any]) -> CVE:
     """Build a CVE from static_context (OSIM-style dict). Maps cve_description -> description."""
     desc = ctx.get("cve_description") or ctx.get("description") or ""
@@ -265,11 +293,22 @@ async def flaw_tool(ctx: RunContext[feature_deps], input: OSIDBToolInput) -> CVE
     """
     logger.debug(input.cve_id)
 
-    # Use static_context when provided (avoids OSIDB API call when data is already available)
     static_ctx = getattr(ctx.deps, "static_context", None)
-    if static_ctx and isinstance(static_ctx, dict):
+    if (
+        static_ctx
+        and isinstance(static_ctx, dict)
+        and _has_sufficient_static_context(static_ctx)
+    ):
         cve = _cve_from_static_context(input.cve_id, static_ctx)
         logger.info(f"Using static context for {input.cve_id} (skipping OSIDB)")
+    elif static_ctx and isinstance(static_ctx, dict):
+        # Insufficient context — fetch from OSIDB, then let request-provided
+        # fields take precedence over the OSIDB data.
+        cve = await cve_retrieve(input.cve_id)
+        cve = _apply_static_overrides(cve, static_ctx)
+        logger.info(
+            f"Enriched OSIDB data for {input.cve_id} with static context overrides"
+        )
     else:
         cve = await cve_retrieve(input.cve_id)
 
