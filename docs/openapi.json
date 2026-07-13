@@ -123,6 +123,74 @@
             }
           }
         }
+      },
+      "post": {
+        "summary": "Cve Multi Analysis",
+        "operationId": "cve_multi_analysis_api_v1_analysis_cve_post",
+        "parameters": [
+          {
+            "name": "detail",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Detail"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CVEMultiAnalysisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CVEMultiAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Unexpected error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/analysis/cve/{feature}": {
@@ -508,6 +576,57 @@
       }
     },
     "schemas": {
+      "CVEMultiAnalysisRequest": {
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$",
+            "title": "Cve Id",
+            "description": "CVE identifier (e.g. CVE-2025-12345)"
+          },
+          "features": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Features",
+            "description": "Feature names to run. If omitted or empty, a default set of stable features is run."
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "cve_id"
+        ],
+        "title": "CVEMultiAnalysisRequest"
+      },
+      "CVEMultiAnalysisResponse": {
+        "properties": {
+          "results": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Results",
+            "description": "Feature name to output model (or null on failure)."
+          },
+          "errors": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeatureError"
+            },
+            "type": "object",
+            "title": "Errors",
+            "description": "Feature name to error detail (only for failures)."
+          }
+        },
+        "type": "object",
+        "title": "CVEMultiAnalysisResponse"
+      },
       "ErrorResponse": {
         "type": "object",
         "properties": {
@@ -520,6 +639,26 @@
           "detail"
         ],
         "title": "ErrorResponse"
+      },
+      "FeatureError": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "Exception class name"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "Human-readable error message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "detail"
+        ],
+        "title": "FeatureError"
       },
       "Feedback": {
         "properties": {
