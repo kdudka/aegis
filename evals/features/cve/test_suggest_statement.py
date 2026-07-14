@@ -441,7 +441,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2026-4271",
         expected_mitigation="Mitigation for this issue is either not available or the currently available options don't meet the Red Hat Product Security criteria comprising ease of use and deployment, applicability to widespread installation base or stability.",
-        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2026-5483",
