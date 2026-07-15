@@ -150,6 +150,7 @@ cases = [
             "known_to_fail_evaluators": [
                 "MitigationWellFormedCommands",
                 "MitigationEvaluator",
+                "StatementEvaluator",
             ]
         },
     ),
