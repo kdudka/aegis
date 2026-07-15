@@ -187,12 +187,16 @@ def pytest_sessionfinish(session, exitstatus):
             # the metrics might not be available if all cases failed
             continue
 
-        # print evaluation score for each evaluator and average duration for each feature
+        # print average evaluation score (or assertion rate) for each evaluator
         for eval_name, score in metrics.scores.items():
-            logging.info(f"[{feat}] {eval_name}: {score:.4f}")
+            if eval_name.startswith("[assertion] "):
+                score_text = f"{score * 100:.1f}%"
+            else:
+                score_text = f"{score:.4f}"
+            logging.info(f"[{feat}] {eval_name}: {score_text}")
 
+        # print average duration for each feature
         evaluator_duration = metrics.total_duration - metrics.task_duration
-        logging.info(f"[{feat}] assertions ratio: {metrics.assertions * 100:.1f}%")
         logging.info(f"[{feat}] average case duration: {metrics.task_duration:.2f}s")
         logging.info(f"[{feat}] average evaluator duration: {evaluator_duration:.2f}s")
 

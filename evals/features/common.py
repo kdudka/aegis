@@ -4,6 +4,7 @@ import json
 import logging
 import math
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -313,7 +314,20 @@ def _log_eval_report(report: EvaluationReport) -> str:
     eval_summary[report.name] = summary
 
     # record evaluation metrics to the global dict
-    eval_metrics[report.name] = report.averages()
+    agg = report.averages()
+    if agg:
+        # include evaluators returning bool (a.k.a. assertions)
+        counts: defaultdict[str, int] = defaultdict(int)
+        passing: defaultdict[str, int] = defaultdict(int)
+        for case in report.cases:
+            for name, result in case.assertions.items():
+                counts[name] += 1
+                if result.value:
+                    passing[name] += 1
+        agg.scores.update(
+            {f"[assertion] {name}": passing[name] / counts[name] for name in counts}
+        )
+    eval_metrics[report.name] = agg
 
     failures = ""
 
