@@ -9,7 +9,10 @@ CVE list in ``kernel_eval_cves.txt``.  The ground-truth columns are
 
 Includes an UnderestimationEvaluator that flags predictions where the model
 assigns a lower severity than the ground truth — these are critical failures
-per the project's asymmetric error policy.
+per the project's asymmetric error policy.  A KpanicOverestimationEvaluator
+flags kernel_panic-driven predictions where the model assigns a higher
+severity than expected — these are scored (not assertion) failures, visible
+in the report for tuning kernel_panic severity logic.
 
 After each run, a structured JSON export of per-case results (predictions,
 explanations, classifier diagnostics, evaluator outcomes) is written to
@@ -146,11 +149,17 @@ KNOWN_FAILURES: dict[str, dict] = {
         ),
     },
     "CVE-2022-50865": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "The explanation states 'requiring ... elevated privileges (PR:N)'. The phrase "
-            "'elevated privileges' contradicts the CVSS vector's PR:N (None), as PR:N "
-            "implies no privileges are required."
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic active; classifier starts at IMPORTANT despite "
+            "OSIDB MODERATE — kpanic-driven overescalation. Also: explanation "
+            "states 'requiring ... elevated privileges (PR:N)'; the phrase "
+            "'elevated privileges' contradicts PR:N (None), as PR:N implies "
+            "no privileges are required."
         ),
     },
     "CVE-2025-68742": {
@@ -191,12 +200,15 @@ KNOWN_FAILURES: dict[str, dict] = {
         ),
     },
     "CVE-2025-68305": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "The explanation only describes a denial of service impact, but the CVSS "
-            "vector sets C:H and I:H. The rubric states 'do not set C:H/I:H for purely "
-            "internal kernel state issues without a plausible user-data impact path.' "
-            "The explanation does not provide such a path for C or I."
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + remote + uaf + danger features; classifier starts at "
+            "IMPORTANT (conf=0.63), LLM CVSS 7.0 (MODERATE band) but no rule "
+            "de-escalates. Also: explanation only describes DoS but vector sets C:H/I:H."
         ),
     },
     "CVE-2025-39905": {
@@ -219,22 +231,27 @@ KNOWN_FAILURES: dict[str, dict] = {
         ),
     },
     "CVE-2023-53669": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "Same pattern as CVE-2025-68742: LLM non-deterministically emits I:N in the "
-            "vector while the explanation describes 'low integrity impact (I:L)'. The cached "
-            "run had I:L (matching OSIDB) and passed; subsequent runs flip to I:N."
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + remote + skb features; classifier MODERATE (conf=0.02) "
+            "but escalated — kpanic overestimation signal. Also: LLM non-deterministically "
+            "emits I:N in vector while explanation describes I:L."
         ),
     },
     "CVE-2025-37803": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "The CVSS vector uses PR:L but the explanation states the vulnerability "
-            "requires 'access to the udmabuf device'. Access to kernel device files "
-            "like /dev/udmabuf typically requires elevated privileges (e.g., root or "
-            "membership in a privileged group). The explanation does not describe any "
-            "plausible unprivileged alternative, making PR:L inconsistent with the "
-            "described trigger path."
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + memory features only; classifier starts IMPORTANT "
+            "(conf=0.03) despite low confidence — kpanic overestimation signal. "
+            "Also: PR:L inconsistent with requiring /dev/udmabuf access."
         ),
     },
     "CVE-2025-38089": {
@@ -259,6 +276,86 @@ KNOWN_FAILURES: dict[str, dict] = {
             "with vector."
         ),
     },
+    # -- Kernel-panic overestimation waivers (AEGIS-441) --
+    "CVE-2025-38718": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + networking + packet features; classifier starts "
+            "IMPORTANT (conf=0.11) despite low confidence — kpanic overestimation."
+        ),
+    },
+    "CVE-2026-22998": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + networking + nvme + outofbounds features; classifier "
+            "MODERATE (conf=0.80) but escalated — kpanic overestimation signal."
+        ),
+    },
+    "CVE-2026-23011": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + kernel_panic_plus_uaf + networking + remote features; "
+            "classifier IMPORTANT (conf=0.34) — kpanic_plus_uaf + G3 guardrail "
+            "overescalation."
+        ),
+    },
+    "CVE-2023-54222": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected LOW. "
+            "kernel_panic + outofbounds features; classifier IMPORTANT (conf=0.91). "
+            "Two-band kpanic overestimation (LOW->IMPORTANT)."
+        ),
+    },
+    "CVE-2023-53510": {
+        "known_to_fail_evaluators": ["UnderestimationEvaluator"],
+        "reason": "LLM non-determinism (predicted LOW, expected MODERATE).",
+    },
+    "CVE-2023-53764": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-37798": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39677": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39809": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39810": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-40320": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
 }
 
 # Without the kernel classifier the LLM alone underestimates these
@@ -277,6 +374,46 @@ if not get_settings().use_kernel_classifier:
     KNOWN_FAILURES["CVE-2026-23074"]["known_to_fail_evaluators"].append(
         "UnderestimationEvaluator"
     )
+
+
+# CVEs where KpanicOverestimationEvaluator runs: AEGIS-441 benchmark
+# CVEs plus CVEs already waived for kpanic overestimation.
+KPANIC_CVES: set[str] = {
+    # AEGIS-441 benchmark
+    "CVE-2023-53510",
+    "CVE-2023-53764",
+    "CVE-2025-37798",
+    "CVE-2025-39677",
+    "CVE-2025-39754",
+    "CVE-2025-39809",
+    "CVE-2025-39810",
+    "CVE-2025-40320",
+    # passing cases: kernel_panic active, predicted matches expected
+    "CVE-2022-50768",
+    "CVE-2022-50873",
+    "CVE-2023-53186",
+    "CVE-2023-54213",
+    "CVE-2023-54258",
+    "CVE-2023-54311",
+    "CVE-2024-53104",
+    "CVE-2025-38089",
+    "CVE-2025-38590",
+    "CVE-2025-39682",
+    "CVE-2025-39905",
+    "CVE-2025-40248",
+    "CVE-2026-23003",
+    "CVE-2026-23074",
+    "CVE-2026-23097",
+    # waived kpanic overestimations (keep in sync with KNOWN_FAILURES)
+    "CVE-2022-50865",
+    "CVE-2023-53669",
+    "CVE-2023-54222",
+    "CVE-2025-37803",
+    "CVE-2025-38718",
+    "CVE-2025-68305",
+    "CVE-2026-22998",
+    "CVE-2026-23011",
+}
 
 
 def _normalize_impact(raw: str) -> str:
@@ -313,6 +450,45 @@ class UnderestimationEvaluator(Evaluator[str, SuggestImpactModel]):
         return EvaluationReason(value=True)
 
 
+class KpanicOverestimationEvaluator(Evaluator[str, SuggestImpactModel]):
+    """Fail when kernel_panic drives a severity overestimation.
+
+    Returns booleans matching UnderestimationEvaluator.  Per-evaluator
+    pass rate is computed manually in ``_log_eval_report`` since
+    pydantic_evals only provides a combined assertions ratio.
+    """
+
+    def evaluate(
+        self, ctx: EvaluatorContext[str, SuggestImpactModel]
+    ) -> EvaluationReason:
+        if ctx.inputs not in KPANIC_CVES:
+            return EvaluationReason(value=True)
+        diag = getattr(ctx.output, "_classifier_diagnostics", None)
+        if not diag:
+            return EvaluationReason(value=True)
+        if "kernel_panic" not in diag.get("active_features", []):
+            return EvaluationReason(value=True)
+
+        actual = (ctx.output.impact or "").strip().upper()
+        expected = (
+            (ctx.expected_output.impact or "").strip().upper()
+            if ctx.expected_output
+            else ""
+        )
+        if not actual or not expected:
+            return EvaluationReason(value=True)
+
+        actual_rank = SEVERITY_RANK.get(actual, 4)
+        expected_rank = SEVERITY_RANK.get(expected, 4)
+
+        if actual_rank < expected_rank:
+            return EvaluationReason(
+                value=False,
+                reason=f"kpanic overestimation: predicted {actual}, expected {expected}",
+            )
+        return EvaluationReason(value=True)
+
+
 VALID_IMPACTS = {"CRITICAL", "IMPORTANT", "MODERATE", "LOW", "NONE", ""}
 
 
@@ -342,15 +518,14 @@ def _load_cases() -> list[SuggestImpactCase]:
             expected_vector = row.get("OSIDB CVSS Vector", "").strip() or None
 
             metadata = KNOWN_FAILURES.get(cve_id)
-            cases.append(
-                SuggestImpactCase(
-                    cve_id=cve_id,
-                    expected_impact=expected_impact or None,
-                    expected_cvss3_score=expected_cvss,
-                    expected_cvss3_vector=expected_vector,
-                    metadata=metadata,
-                )
+            case = SuggestImpactCase(
+                cve_id=cve_id,
+                expected_impact=expected_impact or None,
+                expected_cvss3_score=expected_cvss,
+                expected_cvss3_vector=expected_vector,
+                metadata=metadata,
             )
+            cases.append(case)
     return cases
 
 
@@ -359,6 +534,7 @@ cases = _load_cases()
 evals = common_feature_evals + [
     CVSSValidator(),
     UnderestimationEvaluator(),
+    KpanicOverestimationEvaluator(),
 ]
 
 

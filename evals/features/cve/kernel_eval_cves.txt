@@ -46,3 +46,15 @@ CVE-2023-54181
 CVE-2023-54209
 CVE-2025-68742
 CVE-2023-54222
+
+# -- Kernel-panic overestimation benchmark (AEGIS-441) --
+# Moderate CVEs with kpanic features — should NOT escalate to Important.
+# Used to detect and tune kernel_panic severity overestimation.
+CVE-2023-53510  # Moderate, kpanic SCSI UFS local crash — should not escalate
+CVE-2025-40320  # Moderate, kpanic+UAF SMB cfid — local path, R11 over-escalation risk
+CVE-2025-39754  # Moderate, kpanic mm/smaps race — local DoS only
+CVE-2023-53764  # Moderate, kpanic wifi ath12k lock — adjacent-network, G3 risk
+CVE-2025-37798  # Moderate, kpanic codel qdisc — networking subsystem, G3 risk
+CVE-2025-39677  # Moderate, kpanic net/sched qdisc — privileged-only, should stay Moderate
+CVE-2025-39810  # Moderate, kpanic bnxt_en corruption — network driver, G3 risk
+CVE-2025-39809  # Moderate, kpanic+UAF HID intel-thc — contained HW path, R11 risk

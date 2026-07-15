@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 from aegis_ai.features.cve.impact_mappings import SEVERITY_ORDER, score_to_band
+from aegis_ai.features.cve.kernel import MEMORY_CORRUPTION_FLAGS, NETWORK_EXPOSURE_FLAGS
 
 ESCALATION_FEATURES = {
     "uaf",
@@ -57,6 +58,53 @@ def direction(predicted: str, expected: str) -> str:
     return "match"
 
 
+def _kpanic_mechanism(
+    clf_features: set[str], clf_impact: str | None,
+) -> str:
+    """Identify which rule/guardrail drove a kernel-panic overestimation.
+
+    Only called when ``kernel_panic`` is in *clf_features* (the caller
+    gates on that), so every branch assumes kpanic is present.
+    """
+    if (
+        bool(clf_features & NETWORK_EXPOSURE_FLAGS)
+        and bool(clf_features & MEMORY_CORRUPTION_FLAGS)
+    ):
+        return "g3_network_corruption_floor"
+    if "kernel_panic_plus_uaf" in clf_features:
+        return "r11_kpanic_plus_uaf"
+    if clf_impact == "IMPORTANT":
+        return "classifier_start_important"
+    return "kpanic_other"
+
+
+def _classify_overestimation(
+    *,
+    clf_features: set[str],
+    clf_impact: str | None,
+    clf_confidence: float,
+    llm_band: str,
+    expected: str,
+    predicted: str,
+    cve_id: str,
+    cvss_score: float,
+) -> dict:
+    """Classify the mechanism behind a kernel-panic overestimation."""
+    return {
+        "cve_id": cve_id,
+        "expected": expected,
+        "predicted": predicted,
+        "mechanism": _kpanic_mechanism(clf_features, clf_impact),
+        "has_kpanic": "kernel_panic" in clf_features,
+        "has_kpanic_uaf": "kernel_panic_plus_uaf" in clf_features,
+        "classifier_label": clf_impact,
+        "classifier_confidence": round(clf_confidence, 3) if clf_impact else None,
+        "llm_cvss": cvss_score,
+        "llm_cvss_band": llm_band,
+        "active_features": sorted(clf_features),
+    }
+
+
 def audit(results_path: Path) -> dict:
     with open(results_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -71,6 +119,7 @@ def audit(results_path: Path) -> dict:
         "deescalation_overrides": [],
         "impact_mismatches": [],
         "cvss_anchoring_flags": [],
+        "kpanic_overestimation_analysis": [],
     }
 
     n_match = n_over = n_under = 0
@@ -215,6 +264,20 @@ def audit(results_path: Path) -> dict:
                 }
             )
 
+        if d == "overestimation" and "kernel_panic" in clf_features:
+            report["kpanic_overestimation_analysis"].append(
+                _classify_overestimation(
+                    clf_features=clf_features,
+                    clf_impact=clf_impact,
+                    clf_confidence=clf_confidence,
+                    llm_band=llm_band,
+                    expected=expected,
+                    predicted=predicted,
+                    cve_id=cve_id,
+                    cvss_score=cvss_score,
+                )
+            )
+
     report["summary"] = {
         "exact_matches": n_match,
         "overestimations": n_over,
@@ -225,9 +288,49 @@ def audit(results_path: Path) -> dict:
         "low_confidence_overrides": len(report["low_confidence_overrides"]),
         "deescalation_overrides": n_deescalation,
         "cvss_anchoring_flags": len(report["cvss_anchoring_flags"]),
+        "kpanic_overestimations": len(report["kpanic_overestimation_analysis"]),
     }
 
     return report
+
+
+def _print_kpanic_case(k: dict) -> None:
+    """Print one kpanic overestimation case."""
+    kp_tag = "KPANIC" if k["has_kpanic"] else "      "
+    print(
+        f"  [{kp_tag}] {k['cve_id']:20s}  "
+        f"{k['expected']:10s} → {k['predicted']:10s}  "
+        f"mechanism={k['mechanism']}"
+    )
+    if k["classifier_label"]:
+        print(
+            f"           clf={k['classifier_label']} "
+            f"(conf={k['classifier_confidence']:.3f})  "
+            f"llm_cvss={k['llm_cvss']:.1f} ({k['llm_cvss_band']})"
+        )
+
+
+def _print_kpanic_analysis(kpanic: list[dict]) -> None:
+    """Print the kernel-panic overestimation analysis section."""
+    if not kpanic:
+        return
+
+    from collections import Counter
+
+    mech_counts = Counter(k["mechanism"] for k in kpanic)
+    kpanic_count = sum(1 for k in kpanic if k["has_kpanic"])
+    print(f"\n{'─' * 72}")
+    print(f"  KERNEL-PANIC OVERESTIMATION ANALYSIS ({len(kpanic)} cases)")
+    print(
+        f"  kpanic-driven: {kpanic_count}  |  non-kpanic: {len(kpanic) - kpanic_count}"
+    )
+    print(f"{'─' * 72}")
+    print("  By mechanism:")
+    for mech, count in mech_counts.most_common():
+        print(f"    {mech:35s} {count}")
+    print()
+    for k in sorted(kpanic, key=lambda x: x["cve_id"]):
+        _print_kpanic_case(k)
 
 
 def print_report(report: dict) -> None:
@@ -330,6 +433,8 @@ def print_report(report: dict) -> None:
         for a in anchoring:
             print(f"  {a['cve_id']}: {a['shared_vector']}")
             print(f"    {a['note']}")
+
+    _print_kpanic_analysis(report.get("kpanic_overestimation_analysis", []))
 
     print(f"\n{'=' * 72}")
 
