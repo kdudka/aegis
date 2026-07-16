@@ -51,6 +51,7 @@ ALLOWED_URL_PREFIXES = (
     # Project-specific security pages
     "https://curl.se/docs/",
     "https://docs.djangoproject.com/en/",
+    "https://grafana.com/security/security-advisories/",
     "https://httpd.apache.org/security/",
     "https://kb.isc.org/docs/",
     "https://nodejs.org/en/blog/vulnerability/",
@@ -116,6 +117,9 @@ _GITHUB_REPO_PREFIXES = (
     "https://github.com/gogs/gogs/",
     "https://github.com/golang/go/",
     "https://github.com/golang/vulndb/",
+    "https://github.com/grafana/grafana/",
+    "https://github.com/grafana/loki/",
+    "https://github.com/grafana/tempo/",
     "https://github.com/immutable-js/immutable-js/",
     "https://github.com/isaacs/node-glob/",
     "https://github.com/isaacs/node-tar/",

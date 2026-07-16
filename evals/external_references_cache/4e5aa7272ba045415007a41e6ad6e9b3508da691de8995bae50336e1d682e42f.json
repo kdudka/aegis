@@ -1,10 +1,10 @@
 {
     "url": "https://grafana.com/security/security-advisories/cve-2026-21727",
     "result": {
-        "status": "blocked",
-        "error_message": "URL not in allowlist: https://grafana.com/security/security-advisories/cve-2026-21727",
+        "status": "success",
+        "error_message": null,
         "url": "https://grafana.com/security/security-advisories/cve-2026-21727",
-        "content_type": null,
-        "extracted_text": null
+        "content_type": "text/html",
+        "extracted_text": "Site search\n\nAsk Grot AI\nTry using  Grot AI for this query ->\n\nAll\nDocs\n\nView all results\nNo results.\nThere was an error with your request.\n\n  \n\nCross-Tenant Legacy Correlation Disclosure and Deletion\n\nLow\n\nAdvisory ID:CVE-2026-21727\nPublished:2026-01-29\nProduct:Grafana\nCVSS Score:3.3\nCVSS Vector:CVSS:3.3/AV:N/AC:H/PR:H/UI:N/S:U/C:L/I:L/A:N\nFixed Versions:\n>=12.3.3\n>=12.2.4 <12.3.0\n>=12.1.6 <12.2.0\n>=12.0.9 <12.1.0\n>=11.6.11 <12.0.0\n\nSummary\n\nA cross-tenant isolation vulnerability was found in Grafana\u2019s Correlations feature affecting legacy correlation records. Due to a backward compatibility condition allowing org_id = 0 records to be returned across organizations, a user with datasource management privileges could read and permanently delete legacy correlation data belonging to another organization.\nThanks to Gyu-hyeok Lee (g2h) for reporting this vulnerability."
     }
 }
