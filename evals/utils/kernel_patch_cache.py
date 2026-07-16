@@ -7,7 +7,10 @@ instead of making live HTTP requests to git.kernel.org and GitHub.
 Cache layout::
 
     evals/kernel_patch_cache/patches/{40-char-hash}.patch
-    evals/kernel_patch_cache/html/{40-char-hash}.html
+    evals/kernel_patch_cache/text/{40-char-hash}.txt
+
+The ``text/`` files contain pre-stripped plaintext produced by
+``strip_html()`` — committed to git instead of raw HTML (~98% smaller).
 
 The cache is **read-only** during eval runs.  Use
 ``populate_kernel_cve_cache.py`` (phase 2) to fill it from live sources
@@ -64,23 +67,26 @@ async def cached_fetch_commit_html(
 ) -> list[tuple[str, str]]:
     """Cache-only replacement for ``KernelImpactClassifier._fetch_commit_html``.
 
-    Reads HTML from ``KERNEL_PATCH_CACHE_DIR/html/{hash}.html``.
+    Reads pre-stripped plaintext from ``KERNEL_PATCH_CACHE_DIR/text/{hash}.txt``.
+    The returned content is already ``strip_html()``-processed, and
+    ``extract_html_features()`` handles it correctly since ``strip_html()``
+    is idempotent on plaintext.
     Missing hashes are recorded in :data:`html_cache_misses` and skipped.
     """
-    html_dir = KERNEL_PATCH_CACHE_DIR / "html"
+    text_dir = KERNEL_PATCH_CACHE_DIR / "text"
     results: list[tuple[str, str]] = []
     for h in commit_hashes:
-        cache_file = html_dir / f"{h}.html"
+        cache_file = text_dir / f"{h}.txt"
         try:
             content = cache_file.read_text()
             if len(content) > MIN_HTML_SIZE:
                 results.append((h, content))
-                logger.debug("HTML cache hit: %s", h[:12])
+                logger.debug("HTML text cache hit: %s", h[:12])
             else:
-                logger.warning("HTML cache file too small: %s", cache_file)
+                logger.warning("HTML text cache file too small: %s", cache_file)
                 html_cache_misses.add(h)
         except OSError:
-            logger.warning("HTML cache miss: %s", h[:12])
+            logger.warning("HTML text cache miss: %s", h[:12])
             html_cache_misses.add(h)
     return results
 

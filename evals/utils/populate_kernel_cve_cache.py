@@ -41,6 +41,7 @@ from pathlib import Path
 import httpx
 
 from aegis_ai.kernel_classifier import HTML_COMMIT_URL_TEMPLATES, PATCH_URL_TEMPLATES
+from aegis_ai.kernel_classifier.html import strip_html
 from aegis_ai.toolsets.tools.kernel_cves import LINUXCVEToolResponse, kernel_cve_lookup
 from evals.utils.kernel_cve_context_cache import (
     CACHE_MISSES_FILE,
@@ -229,17 +230,27 @@ async def _populate_cve_context(cve_ids: list[str]) -> None:
 
 
 async def _fetch_artifacts(hashes: set[str], kind: str) -> None:
-    """Fetch artifacts (patches or HTML) and write to the cache directory."""
+    """Fetch artifacts (patches or HTML) and write to the cache directory.
+
+    For HTML artifacts, also writes a stripped plaintext version to
+    ``text/{hash}.txt`` (committed to git instead of raw HTML).
+    """
     cfg = _ARTIFACT_CONFIG[kind]
 
     out_dir = KERNEL_PATCH_CACHE_DIR / cfg.subdir
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    text_dir: Path | None = None
+    if kind == "html":
+        text_dir = KERNEL_PATCH_CACHE_DIR / "text"
+        text_dir.mkdir(parents=True, exist_ok=True)
 
     to_fetch = [
         h
         for h in sorted(hashes)
         if not (out_dir / f"{h}{cfg.ext}").exists()
         or (out_dir / f"{h}{cfg.ext}").stat().st_size <= cfg.min_size
+        or (text_dir is not None and not (text_dir / f"{h}.txt").exists())
     ]
     if not to_fetch:
         log.info("[%s] all %d item(s) already cached", kind, len(hashes))
@@ -251,6 +262,18 @@ async def _fetch_artifacts(hashes: set[str], kind: str) -> None:
     async with httpx.AsyncClient(timeout=30.0) as client:
         for i, h in enumerate(to_fetch, 1):
             log.info("[%s] [%d/%d] %s", kind, i, len(to_fetch), h[:12])
+
+            existing_html = out_dir / f"{h}{cfg.ext}"
+            if (
+                text_dir is not None
+                and existing_html.exists()
+                and existing_html.stat().st_size > cfg.min_size
+            ):
+                text = strip_html(existing_html.read_text())
+                (text_dir / f"{h}.txt").write_text(text)
+                log.info("  text/ written from existing HTML")
+                continue
+
             fetched = False
             for tmpl in cfg.url_templates:
                 url = tmpl.format(hash=h)
@@ -258,6 +281,8 @@ async def _fetch_artifacts(hashes: set[str], kind: str) -> None:
                     resp = await client.get(url, follow_redirects=True)
                     if resp.status_code == 200 and len(resp.text) > cfg.min_size:
                         (out_dir / f"{h}{cfg.ext}").write_text(resp.text)
+                        if text_dir is not None:
+                            (text_dir / f"{h}.txt").write_text(strip_html(resp.text))
                         log.info("  cached from %s", url.split("/")[2])
                         fetched = True
                         break
