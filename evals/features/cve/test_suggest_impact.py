@@ -556,6 +556,11 @@ cases = [
         data_quality=0.6,
     ),
     SuggestImpactCase(
+        cve_id="CVE-2026-10601",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L",
+    ),
+    SuggestImpactCase(
         cve_id="CVE-2026-21727",
         expected_impact="LOW",
     ),

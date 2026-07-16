@@ -1,0 +1,10 @@
+{
+    "url": "https://grafana.com/security/security-advisories/cve-2026-10601",
+    "result": {
+        "status": "success",
+        "error_message": null,
+        "url": "https://grafana.com/security/security-advisories/cve-2026-10601",
+        "content_type": "text/html",
+        "extracted_text": "Site search\n\nAsk Grot AI\nTry using  Grot AI for this query ->\n\nAll\nDocs\n\nView all results\nNo results.\nThere was an error with your request.\n\n  \n\nPath traversal in the Tempo and Loki data source plugins\n\nMedium\n\nAdvisory ID:CVE-2026-10601\nPublished:2026-06-09\nProduct:Grafana\nCVSS Score:5.4\nCVSS Vector:CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L\nFixed Versions:\n>=11.6.15\n>=12.2.9\n>=12.3.7\n>=12.4.4\n>=13.0.2\n\nSummary\nA user with Viewer permissions can use specially crafted requests to the Tempo and Loki data source plugins to reach unintended backend endpoints. Depending on the backend configuration this can expose data source credentials, leak internal responses, or trigger administrative actions on the configured backend. Upgrade to a fixed version listed below."
+    }
+}

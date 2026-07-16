@@ -1,0 +1,10 @@
+{
+    "url": "https://www.cve.org/CVERecord?id=CVE-2026-10601",
+    "result": {
+        "status": "success",
+        "error_message": null,
+        "url": "https://www.cve.org/CVERecord?id=CVE-2026-10601",
+        "content_type": "application/json",
+        "extracted_text": "{\n  \"descriptions\": [\n    {\n      \"lang\": \"en\",\n      \"value\": \"A user with Viewer permissions can use specially crafted requests to the Tempo and Loki data source plugins to reach unintended backend endpoints. Depending on the backend configuration this can expose data source credentials, leak internal responses, or trigger administrative actions on the configured backend.\"\n    }\n  ],\n  \"metrics\": [\n    {\n      \"cvssV3_1\": {\n        \"version\": \"3.1\",\n        \"baseScore\": 5.4,\n        \"baseSeverity\": \"MEDIUM\",\n        \"vectorString\": \"CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L\"\n      }\n    }\n  ],\n  \"affected\": [\n    {\n      \"vendor\": \"Grafana\",\n      \"product\": \"Grafana OSS\",\n      \"defaultStatus\": \"unaffected\",\n      \"versions\": [\n        {\n          \"version\": \"11.6.0\",\n          \"status\": \"affected\",\n          \"versionType\": \"semver\",\n          \"lessThanOrEqual\": \"11.6.14\"\n        },\n        {\n          \"version\": \"12.2.0\",\n          \"status\": \"affected\",\n          \"versionType\": \"semver\",\n          \"lessThanOrEqual\": \"12.2.8\"\n        },\n        {\n          \"version\": \"12.3.0\",\n          \"status\": \"affected\",\n          \"versionType\": \"semver\",\n          \"lessThanOrEqual\": \"12.3.6\"\n        },\n        {\n          \"version\": \"12.4.0\",\n          \"status\": \"affected\",\n          \"versionType\": \"semver\",\n          \"lessThanOrEqual\": \"12.4.3\"\n        },\n        {\n          \"version\": \"13.0.0\",\n          \"status\": \"affected\",\n          \"versionType\": \"semver\",\n          \"lessThanOrEqual\": \"13.0.1\"\n        }\n      ]\n    }\n  ]\n}"
+    }
+}
