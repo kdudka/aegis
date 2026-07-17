@@ -9,9 +9,27 @@ from google.genai.errors import ServerError
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.run import AgentRunResult
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_tools_used(result: AgentRunResult) -> list[str]:
+    """Extract unique tool names from the pydantic-ai message history.
+
+    Excludes pydantic-ai's synthetic ``final_result`` tool used internally
+    for structured output delivery.
+    """
+    return list(
+        dict.fromkeys(
+            tc.tool_name
+            for msg in result.all_messages()
+            if isinstance(msg, ModelResponse)
+            for tc in (msg.tool_calls or ())
+            if tc.tool_name != "final_result"
+        )
+    )
 
 
 def _extract_model_error(exc: BaseException) -> str | None:
@@ -296,6 +314,9 @@ class Feature(ABC):
                 call_str,
                 _MAX_OUTPUT_ENFORCEMENT_RETRIES,
             )
+
+        # populate tools_used from the actual tool-call history
+        result.output.tools_used = _extract_tools_used(result)
 
         # check how many input tokens were processed by the LLM
         input_tokens = result._state.usage.input_tokens

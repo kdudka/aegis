@@ -276,7 +276,6 @@ def test_suggest_affected_components_endpoint():
 
     assert "tools_used" in data
     assert isinstance(data["tools_used"], list)
-    assert "osidb_tool" in data["tools_used"]
 
     assert "disclaimer" in data
     assert isinstance(data["disclaimer"], str)

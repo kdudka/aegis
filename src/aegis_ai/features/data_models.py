@@ -64,9 +64,9 @@ class AegisFeatureModel(BaseModel):
         description="Quantification of reliability of the provided suggestion, ranging from 0.0 (guessing) to 1.0 (certainty).  Be conservative in this judgment.",
     )
 
-    tools_used: List = Field(
-        ...,
-        description="List the names of registered tools, if any, that was used to formulate this answer. If this is a CVE suggest feature then should minimally include 'osidb_tool'",
+    tools_used: List[str] = Field(
+        default_factory=list,
+        description="Tools that were called during this run (populated automatically, not by the LLM).",
     )
 
     # Important: This default disclaimer is required by AI assessment - do not change or remove without talking to someone !
