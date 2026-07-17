@@ -47,6 +47,7 @@ from . import (
 from .data_models import (
     CVEMultiAnalysisRequest,
     CVEMultiAnalysisResponse,
+    CVESingleAnalysisRequest,
     Feedback,
     FeatureError,
     FeatureKPI,
@@ -533,29 +534,21 @@ async def cve_multi_analysis(
     response_class=JSONResponse,
 )
 async def cve_analysis_with_body(
-    feature: CVEFeatureName, cve_data: Request, detail: bool = False
+    feature: CVEFeatureName,
+    request_body: CVESingleAnalysisRequest,
+    detail: bool = False,
 ):
-    try:
-        cve_data = await cve_data.json()
-        cve_id = cve_data["cve_id"]
-    except KeyError as e:
-        log_exception_safely(e, "Missing required field: 'cve_id'")
-        raise HTTPException(status_code=400, detail="Missing required field: 'cve_id'")
-    if not cve_id:
-        raise HTTPException(status_code=400, detail="'cve_id' must not be empty.")
+    cve_id = request_body.cve_id
+    selected_agent = _resolve_agent(request_body.agent)
 
     feature_name = feature.value
     if feature_name not in cve_feature_registry:
         raise HTTPException(404, detail=f"CVE feature '{feature_name}' not found.")
     FeatureClass = cve_feature_registry[feature_name]
-    try:
-        validated_input = dict(cve_data)
-    except Exception as e:
-        msg = f"Invalid input for CVE feature '{feature_name}'"
-        log_exception_safely(e, msg)
-        raise HTTPException(status_code=422, detail=msg)
 
-    selected_agent = _resolve_agent(cve_data.get("agent"))
+    validated_input: dict[str, Any] = {"cve_id": cve_id}
+    if request_body.model_extra:
+        validated_input.update(request_body.model_extra)
 
     validated_input = await _maybe_infer_components(
         cve_id,

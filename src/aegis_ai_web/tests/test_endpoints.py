@@ -127,7 +127,7 @@ def test_yaml_openapi():
 )
 def test_invalid_json_request_body(invalid_json_content, description):
     """
-    Test that invalid JSON in request body returns 400 with proper error message
+    Test that invalid JSON in request body returns 422 with proper error detail
     instead of leaking a full traceback.
     """
     response = client.post(
@@ -135,17 +135,15 @@ def test_invalid_json_request_body(invalid_json_content, description):
         content=invalid_json_content,
         headers={"Content-Type": "application/json"},
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "detail" in response.json()
-    assert "Invalid JSON" in response.json()["detail"]
-    # Verify traceback is not present in response
     assert "Traceback" not in response.text
     assert "stack" not in response.text
 
 
 def test_missing_cve_id_field():
     """
-    Test that missing 'cve_id' field in request body returns 400 with proper error message
+    Test that missing 'cve_id' field in request body returns 422 with proper error detail
     instead of leaking a full traceback.
     """
     response = client.post(
@@ -153,35 +151,33 @@ def test_missing_cve_id_field():
         json={},  # Empty JSON body - missing 'cve_id' field
         headers={"Content-Type": "application/json"},
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert "detail" in response.json()
-    assert "Missing required field: 'cve_id'" in response.json()["detail"]
-    # Verify traceback is not present in response
     assert "Traceback" not in response.text
     assert "stack" not in response.text
 
 
 def test_empty_cve_id():
     """
-    Test that empty 'cve_id' field in request body returns 400 with proper error
-    message instead of crashing with 500.
+    Empty 'cve_id' is rejected by Pydantic's CVEID regex and returns 422
+    (FastAPI's standard for request-validation errors), consistent with the
+    multi-analysis endpoint.
     """
     response = client.post(
         "/api/v1/analysis/cve/suggest-impact",
         json={"cve_id": ""},
         headers={"Content-Type": "application/json"},
     )
-    assert response.status_code == 400
-    assert "'cve_id' must not be empty" in response.json()["detail"]
+    assert response.status_code == 422
 
 
 def test_invalid_utf8_encoding():
     """
-    Test that invalid UTF-8 encoding in request body returns 400 with proper error message
+    Test that invalid UTF-8 encoding in request body returns an error
     instead of leaking a full traceback.
 
-    Note: This test sends raw bytes with invalid UTF-8. The UnicodeDecodeError may occur
-    during body reading or JSON parsing, but should be caught by the global handler.
+    Note: This test sends raw bytes with invalid UTF-8. FastAPI catches
+    the error during body parsing and returns 422.
     """
     # Create invalid UTF-8 bytes (invalid continuation byte \x80)
     # This simulates the curl example: curl -d $'{\x80'
@@ -191,15 +187,8 @@ def test_invalid_utf8_encoding():
         content=invalid_utf8,
         headers={"Content-Type": "application/json"},
     )
-    assert response.status_code == 400
+    assert response.status_code in (400, 422)
     assert "detail" in response.json()
-    # The error might be caught as JSONDecodeError or UnicodeDecodeError
-    # depending on when the encoding error occurs
-    detail = response.json()["detail"]
-    assert "Invalid" in detail and (
-        "JSON" in detail or "UTF-8" in detail or "encoding" in detail
-    )
-    # Verify traceback is not present in response
     assert "Traceback" not in response.text
     assert "stack" not in response.text
 
