@@ -262,6 +262,32 @@ Once running - interact with the API via HTTP - for example: `http://localhost:9
 
 Documentation for the REST API is provided via OpenAPI docs.
 
+#### Analysing external / non-OSIDB vulnerabilities
+
+Use `"agent": "public"` to analyse CVEs that are not tracked in OSIDB
+(e.g. third-party advisories, embargoed vulnerabilities, or dummy CVE IDs).
+The public agent removes OSIDB tools entirely and works only with the data
+you provide in the request body:
+
+```bash
+curl -s -X POST http://localhost:9000/api/v1/analysis/cve \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "cve_id": "CVE-2026-22100",
+    "agent": "public",
+    "title": "OCPP DataTransfer ReserveLogin command injection",
+    "comment_zero": "The OCPP DataTransfer message ReserveLogin is vulnerable to command injection. By manipulating the data value, arbitrary OS commands can be executed as root.",
+    "impact": "CRITICAL",
+    "components": ["ocpp-server"],
+    "features": ["suggest-impact", "suggest-cwe"]
+  }'
+```
+
+All OSIDB CVE fields are accepted: `title`, `cve_description`, `comment_zero`,
+`comments`, `cwe_id`, `impact`, `statement`, `mitigation`, `components`,
+`references`, `affects`, and `cvss_scores`.  Only the fields you provide are
+included in the prompt — the rest are omitted.
+
 ---
 ## System Overview
 System context diagram for Aegis.
