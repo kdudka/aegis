@@ -378,7 +378,8 @@ def _map_feature_error(exc: Exception, feature_name: str) -> FeatureError:
             detail=f"No flaw data found in OSIDB for {exc.cve_id}.",
         )
     if isinstance(exc, OSIDBUnauthorizedError):
-        log_exception_safely(exc, f"OSIDB auth failure for CVE feature '{feature_name}'")
+        msg = f"OSIDB auth failure for CVE feature '{feature_name}'"
+        log_exception_safely(exc, msg)
         return FeatureError(
             error="OSIDBUnauthorizedError",
             detail="OSIDB authentication failed (HTTP 401).",
