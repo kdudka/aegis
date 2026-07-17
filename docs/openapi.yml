@@ -154,6 +154,44 @@ paths:
                 cve_description:
                   type: string
                   description: CVE description text (used as prompt context when provided)
+                cwe_id:
+                  type: string
+                  description: CWE identifier (e.g. CWE-79)
+                impact:
+                  type: string
+                  description: CVE impact rating (e.g. LOW, MODERATE, IMPORTANT, CRITICAL)
+                statement:
+                  type: string
+                  description: Red Hat CVE statement
+                mitigation:
+                  type: string
+                  description: Red Hat CVE mitigation
+                comment_zero:
+                  type: string
+                  description: CVE comment zero (primary description from Bugzilla)
+                comments:
+                  type: string
+                  description: All public comments
+                components:
+                  type: array
+                  items:
+                    type: string
+                  description: List of affected components
+                references:
+                  type: array
+                  items:
+                    type: object
+                  description: List of reference URLs
+                affects:
+                  type: array
+                  items:
+                    type: object
+                  description: List of affected products/modules
+                cvss_scores:
+                  type: array
+                  items:
+                    type: object
+                  description: List of CVSS scores (issuer + vector)
                 agent:
                   type: string
                   enum:

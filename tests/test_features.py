@@ -205,6 +205,66 @@ async def test_quality_review_with_test_model():
     assert len(quality_review.manual_context_needed) > 0
 
 
+class TestBuildCveInput:
+    """Tests for _build_cve_input() helper that populates prompt context."""
+
+    def test_no_static_context(self):
+        result = cve._build_cve_input("CVE-2025-1234")
+        assert result.cve_id == "CVE-2025-1234"
+        assert result.title is None
+        assert result.description is None
+        assert result.cwe_id is None
+        assert result.components is None
+
+    def test_all_osidb_fields_forwarded(self):
+        ctx = {
+            "title": "kernel: buffer overflow",
+            "cve_description": "A flaw was found in the kernel.",
+            "cwe_id": "CWE-120",
+            "impact": "IMPORTANT",
+            "statement": "Red Hat is aware.",
+            "mitigation": "Disable the module.",
+            "comment_zero": "Buffer overflow in net subsystem.",
+            "comments": "Additional context.",
+            "components": ["kernel"],
+            "references": [{"url": "https://example.com"}],
+            "affects": [{"ps_module": "rhel-9"}],
+            "cvss_scores": [
+                {
+                    "issuer": "RH",
+                    "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                }
+            ],
+        }
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.cve_id == "CVE-2025-1234"
+        assert result.title == "kernel: buffer overflow"
+        assert result.description == "Buffer overflow in net subsystem."
+        assert result.cwe_id == "CWE-120"
+        assert result.impact == "IMPORTANT"
+        assert result.statement == "Red Hat is aware."
+        assert result.mitigation == "Disable the module."
+        assert result.comment_zero == "Buffer overflow in net subsystem."
+        assert result.comments == "Additional context."
+        assert result.components == ["kernel"]
+        assert result.references == [{"url": "https://example.com"}]
+        assert result.affects == [{"ps_module": "rhel-9"}]
+        assert result.cvss_scores is not None and len(result.cvss_scores) == 1
+
+    def test_description_fallback_to_cve_description(self):
+        ctx = {"cve_description": "NVD description text."}
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.description == "NVD description text."
+
+    def test_repr_omits_none_fields(self):
+        inp = cve.CVEFeatureInput(cve_id="CVE-2025-1234", title="Test")
+        r = repr(inp)
+        assert "cve_id=" in r
+        assert "title=" in r
+        assert "None" not in r
+        assert "components" not in r
+
+
 async def test_suggest_impact_with_bad_cve_test_model():
     with pytest.raises(ValidationError) as excinfo:
         await cve.SuggestImpact(rh_feature_agent).exec("BAD-CVE-ID")

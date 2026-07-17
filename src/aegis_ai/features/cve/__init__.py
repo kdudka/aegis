@@ -46,6 +46,16 @@ def _build_cve_input(cve_id: CVEID, static_context: Any = None) -> CVEFeatureInp
             cve_id=cve_id,
             title=static_context.get("title"),
             description=desc,
+            cwe_id=static_context.get("cwe_id"),
+            impact=static_context.get("impact"),
+            statement=static_context.get("statement"),
+            mitigation=static_context.get("mitigation"),
+            comment_zero=static_context.get("comment_zero"),
+            comments=static_context.get("comments"),
+            components=static_context.get("components"),
+            references=static_context.get("references"),
+            affects=static_context.get("affects"),
+            cvss_scores=static_context.get("cvss_scores"),
         )
     return CVEFeatureInput(cve_id=cve_id)
 

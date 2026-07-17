@@ -10,6 +10,24 @@ class CVEFeatureInput(BaseModel):
     cve_id: CVEID = Field(..., description="CVE ID input")
     title: Optional[str] = Field(None, description="CVE title")
     description: Optional[str] = Field(None, description="CVE description")
+    cwe_id: Optional[str] = Field(None, description="CVE CWE ID")
+    impact: Optional[str] = Field(None, description="CVE impact")
+    statement: Optional[str] = Field(None, description="CVE statement")
+    mitigation: Optional[str] = Field(None, description="CVE mitigation")
+    comment_zero: Optional[str] = Field(None, description="CVE comment_zero")
+    comments: Optional[str] = Field(None, description="All public comments")
+    components: Optional[List] = Field(None, description="List of components")
+    references: Optional[List] = Field(None, description="List of references")
+    affects: Optional[List] = Field(None, description="List of affects")
+    cvss_scores: Optional[List] = Field(None, description="List of CVSS scores")
+
+    def __repr__(self) -> str:
+        fields = {k: v for k, v in self.__dict__.items() if v is not None}
+        pairs = " ".join(f"{k}={v!r}" for k, v in fields.items())
+        return f"{self.__class__.__name__}({pairs})"
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
 
 class CVEDataCriticOutput(AegisFeatureModel):
