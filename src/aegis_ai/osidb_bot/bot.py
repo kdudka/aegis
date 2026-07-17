@@ -294,6 +294,11 @@ class FlawUpdater:
     def create_alias_label(self, label_name: str) -> bool:
         """create a flaw label of type "alias" with name label_name, return True on success"""
         assert self.flaw_data
+        if self.read_only:
+            msg = f"read-only mode, skipping creation of label '{label_name}'"
+            self._warn(msg)
+            return False
+
         try:
             flaw_uuid = self.flaw_data["uuid"]
             cast(Any, self.osidb.flaws).labels.create(
