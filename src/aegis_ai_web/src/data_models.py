@@ -26,6 +26,11 @@ class CVEMultiAnalysisRequest(BaseModel):
         default=None,
         description="Feature names to run. If omitted or empty, a default set of stable features is run.",
     )
+    agent: Optional[str] = Field(
+        default=None,
+        description="Agent to use: 'public' (no OSIDB tools) or 'redhat' (with OSIDB tools). "
+        "Defaults to the server-configured agent (AEGIS_WEB_FEATURE_AGENT).",
+    )
 
 
 class CVEMultiAnalysisResponse(BaseModel):

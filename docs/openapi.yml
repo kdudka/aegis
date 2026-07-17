@@ -136,6 +136,34 @@ paths:
           type: boolean
           default: false
           title: Detail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - cve_id
+              properties:
+                cve_id:
+                  type: string
+                  pattern: ^CVE-[0-9]{4}-[0-9]{4,7}$
+                  description: CVE identifier (e.g. CVE-2025-12345)
+                title:
+                  type: string
+                  description: CVE title (used as prompt context when provided)
+                cve_description:
+                  type: string
+                  description: CVE description text (used as prompt context when provided)
+                agent:
+                  type: string
+                  enum:
+                  - public
+                  - redhat
+                  description: >-
+                    Agent to use for analysis. 'public' removes OSIDB tools so the
+                    LLM analyses user-provided text only. 'redhat' includes OSIDB
+                    tools (default when omitted; governed by AEGIS_WEB_FEATURE_AGENT).
+              additionalProperties: true
       responses:
         '200':
           description: Successful Response
@@ -387,6 +415,18 @@ components:
           - type: 'null'
           title: Features
           description: Feature names to run. If omitted or empty, a default set of stable features is run.
+        agent:
+          anyOf:
+          - type: string
+            enum:
+            - public
+            - redhat
+          - type: 'null'
+          title: Agent
+          description: >-
+            Agent to use for analysis. 'public' removes OSIDB tools so the
+            LLM analyses user-provided text only. 'redhat' includes OSIDB
+            tools (default when omitted; governed by AEGIS_WEB_FEATURE_AGENT).
       type: object
       required:
       - cve_id

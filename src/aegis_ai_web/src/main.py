@@ -242,6 +242,19 @@ else:
     llm_agent = rh_feature_agent
 
 
+def _resolve_agent(agent_param: str | None):
+    if agent_param is None:
+        return llm_agent
+    if agent_param == "public":
+        return public_feature_agent
+    if agent_param == "redhat":
+        return rh_feature_agent
+    raise HTTPException(
+        status_code=400,
+        detail=f"Invalid agent: {agent_param!r}. Must be 'public' or 'redhat'.",
+    )
+
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return FileResponse(favicon_path)
@@ -341,6 +354,7 @@ async def _maybe_infer_components(
     cve_id: str,
     validated_input: dict,
     skip_inference: bool = False,
+    agent=None,
 ) -> dict:
     """Conditionally run SuggestAffectedComponents and return enriched context."""
     if skip_inference:
@@ -354,7 +368,7 @@ async def _maybe_infer_components(
     ) or ""
     if not existing_components and validated_input.get("title") and description_text:
         try:
-            sac_instance = cve.SuggestAffectedComponents(agent=llm_agent)
+            sac_instance = cve.SuggestAffectedComponents(agent=agent or llm_agent)
             sac_result = await sac_instance.exec(cve_id, static_context=validated_input)
             return {
                 **validated_input,
@@ -447,6 +461,7 @@ async def cve_multi_analysis(
     request_body: CVEMultiAnalysisRequest, detail: bool = False
 ):
     cve_id = request_body.cve_id
+    selected_agent = _resolve_agent(request_body.agent)
     requested_features = request_body.features
     if not requested_features:
         requested_features = list(DEFAULT_CVE_FEATURES)
@@ -476,7 +491,7 @@ async def cve_multi_analysis(
     if sac_requested and not existing_components:
         # Run SAC first so its inferred components are available to sibling features
         try:
-            sac_instance = cve.SuggestAffectedComponents(agent=llm_agent)
+            sac_instance = cve.SuggestAffectedComponents(agent=selected_agent)
             sac_result = await sac_instance.exec(cve_id, static_context=validated_input)
             results[sac_name] = sac_result if detail else sac_result.output
             validated_input = {
@@ -488,13 +503,15 @@ async def cve_multi_analysis(
             errors[sac_name] = _map_feature_error(exc, sac_name)
         remaining_features = [f for f in requested_features if f != sac_name]
     else:
-        enriched_input = await _maybe_infer_components(cve_id, validated_input)
+        enriched_input = await _maybe_infer_components(
+            cve_id, validated_input, agent=selected_agent
+        )
         validated_input = enriched_input
         remaining_features = list(requested_features)
 
     async def _run_feature(feature_name: str) -> Any:
         FeatureClass = cve_feature_registry[feature_name]
-        feature_instance = FeatureClass(agent=llm_agent)
+        feature_instance = FeatureClass(agent=selected_agent)
         result = await feature_instance.exec(cve_id, static_context=validated_input)
         return result if detail else result.output
 
@@ -524,6 +541,8 @@ async def cve_analysis_with_body(
     except KeyError as e:
         log_exception_safely(e, "Missing required field: 'cve_id'")
         raise HTTPException(status_code=400, detail="Missing required field: 'cve_id'")
+    if not cve_id:
+        raise HTTPException(status_code=400, detail="'cve_id' must not be empty.")
 
     feature_name = feature.value
     if feature_name not in cve_feature_registry:
@@ -536,14 +555,17 @@ async def cve_analysis_with_body(
         log_exception_safely(e, msg)
         raise HTTPException(status_code=422, detail=msg)
 
+    selected_agent = _resolve_agent(cve_data.get("agent"))
+
     validated_input = await _maybe_infer_components(
         cve_id,
         validated_input,
         skip_inference=(feature_name == "suggest-affected-components"),
+        agent=selected_agent,
     )
 
     try:
-        feature_instance = FeatureClass(agent=llm_agent)
+        feature_instance = FeatureClass(agent=selected_agent)
         result = await feature_instance.exec(cve_id, static_context=validated_input)
         if detail:
             return result

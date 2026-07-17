@@ -1,9 +1,10 @@
 import pytest
 import yaml
 from unittest.mock import AsyncMock, MagicMock, patch
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from aegis_ai.features import component as component_features
+from aegis_ai.features import Feature, component as component_features
 from aegis_ai.features import cve as cve_features
 from aegis_ai.features.component.data_models import ComponentIntelligenceModel
 from aegis_ai.features.cve.data_models import SuggestAffectedComponentsModel
@@ -11,7 +12,14 @@ from aegis_ai.toolsets.tools.osidb.osidb_client import (
     OSIDBFlawNotFoundError,
     OSIDBUnauthorizedError,
 )
-from aegis_ai_web.src.main import app, cve_feature_registry, DEFAULT_CVE_FEATURES
+from aegis_ai.agents import public_feature_agent, rh_feature_agent
+from aegis_ai_web.src.main import (
+    app,
+    cve_feature_registry,
+    DEFAULT_CVE_FEATURES,
+    _resolve_agent,
+    llm_agent,
+)
 
 # Create a TestClient instance based on your FastAPI app
 client = TestClient(app)
@@ -151,6 +159,20 @@ def test_missing_cve_id_field():
     # Verify traceback is not present in response
     assert "Traceback" not in response.text
     assert "stack" not in response.text
+
+
+def test_empty_cve_id():
+    """
+    Test that empty 'cve_id' field in request body returns 400 with proper error
+    message instead of crashing with 500.
+    """
+    response = client.post(
+        "/api/v1/analysis/cve/suggest-impact",
+        json={"cve_id": ""},
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 400
+    assert "'cve_id' must not be empty" in response.json()["detail"]
 
 
 def test_invalid_utf8_encoding():
@@ -610,3 +632,103 @@ class TestCveMultiAnalysis:
         data = response.json()
         result = data["results"]["suggest-affected-components"]
         assert result is not None
+
+
+class TestResolveAgent:
+    """Tests for per-request agent selection via _resolve_agent()."""
+
+    def test_none_returns_default(self):
+        assert _resolve_agent(None) is llm_agent
+
+    def test_public_returns_public_agent(self):
+        assert _resolve_agent("public") is public_feature_agent
+
+    def test_redhat_returns_rh_agent(self):
+        assert _resolve_agent("redhat") is rh_feature_agent
+
+    def test_invalid_agent_raises_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_agent("my_public_agent")
+        assert exc_info.value.status_code == 400
+        assert "Invalid agent" in exc_info.value.detail
+
+    def test_case_sensitive_rejects_uppercase(self):
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_agent("PUBLIC")
+        assert exc_info.value.status_code == 400
+
+
+class TestAgentSelectionEndpoints:
+    """Tests for per-request agent selection in POST CVE analysis endpoints."""
+
+    def test_post_single_feature_with_public_agent(self):
+        """POST /api/v1/analysis/cve/{feature} respects agent='public'."""
+        mock_result = _make_mock_result(_make_sac_output())
+        captured_agents = []
+
+        def spy_init(self, agent):
+            captured_agents.append(agent)
+            Feature.__init__(self, agent)
+
+        with (
+            patch.object(
+                cve_features.SuggestAffectedComponents,
+                "__init__",
+                spy_init,
+            ),
+            patch.object(
+                cve_features.SuggestAffectedComponents,
+                "exec",
+                new_callable=AsyncMock,
+                return_value=mock_result,
+            ),
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve/suggest-affected-components",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "agent": "public",
+                    "title": "Test title",
+                    "cve_description": "Test description",
+                },
+            )
+        assert response.status_code == 200
+        assert len(captured_agents) == 1
+        assert captured_agents[0] is public_feature_agent
+
+    def test_post_multi_analysis_with_public_agent(self):
+        """POST /api/v1/analysis/cve with agent='public' uses public agent."""
+        mock_result = _make_mock_result(_make_sac_output())
+        captured_agents = []
+
+        def make_spy():
+            def spy_init(self, agent):
+                captured_agents.append(agent)
+                Feature.__init__(self, agent)
+
+            return spy_init
+
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for cls in cve_feature_registry.values():
+                stack.enter_context(patch.object(cls, "__init__", make_spy()))
+                stack.enter_context(
+                    patch.object(
+                        cls, "exec", new_callable=AsyncMock, return_value=mock_result
+                    )
+                )
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": ["suggest-affected-components"],
+                    "agent": "public",
+                },
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert "suggest-affected-components" in data["results"]
+        assert data["errors"] == {}
+        assert len(captured_agents) >= 1
+        assert all(a is public_feature_agent for a in captured_agents)
