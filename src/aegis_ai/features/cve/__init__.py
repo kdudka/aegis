@@ -36,6 +36,17 @@ logger = logging.getLogger(__name__)
 
 
 def _build_cve_input(cve_id: CVEID, static_context: Any = None) -> CVEFeatureInput:
+    if isinstance(static_context, dict):
+        desc = (
+            static_context.get("comment_zero")
+            or static_context.get("cve_description")
+            or static_context.get("description")
+        )
+        return CVEFeatureInput(
+            cve_id=cve_id,
+            title=static_context.get("title"),
+            description=desc,
+        )
     return CVEFeatureInput(cve_id=cve_id)
 
 
