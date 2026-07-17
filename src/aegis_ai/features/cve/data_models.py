@@ -8,6 +8,8 @@ from aegis_ai.features.data_models import AegisFeatureModel
 
 class CVEFeatureInput(BaseModel):
     cve_id: CVEID = Field(..., description="CVE ID input")
+    title: Optional[str] = Field(None, description="CVE title")
+    description: Optional[str] = Field(None, description="CVE description")
 
 
 class CVEDataCriticOutput(AegisFeatureModel):
