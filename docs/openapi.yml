@@ -137,6 +137,7 @@ paths:
           default: false
           title: Detail
       requestBody:
+        required: true
         content:
           application/json:
             schema:
