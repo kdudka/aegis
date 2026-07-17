@@ -493,9 +493,11 @@ class Bot(StateProxy):
                 self.pending[flaw_updater.position()] = True  # mark as pending
             await flaw_updater.do()
 
-        except RuntimeError as e:
+        except BaseException as e:
             # something has failed
-            logger.warning(f"{cve}: {str(e)}")
+            handled_failure = isinstance(e, RuntimeError)
+            if handled_failure:
+                logger.warning(f"{cve}: {str(e)}")
 
             # schedule retry if enabled (but not for validation failures)
             if (
@@ -505,6 +507,10 @@ class Bot(StateProxy):
             ):
                 # the last retry attempt failed, create the manual-triage label
                 flaw_updater.create_alias_label("manual-triage")
+
+            if not handled_failure:
+                # propagate all but RuntimeError exceptions
+                raise
 
         finally:
             if self.retrying_failed:
