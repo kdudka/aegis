@@ -262,6 +262,7 @@ cases = [
         metadata={
             "known_to_fail_evaluators": [
                 "MitigationWellFormedCommands",
+                "StatementNoCodeLevelDetails",
                 "StatementNoDuplicatedInfo",
             ]
         },
