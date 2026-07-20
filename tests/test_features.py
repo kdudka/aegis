@@ -1,9 +1,11 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from pydantic_core import ValidationError
 
 from aegis_ai.agents import rh_feature_agent
-from aegis_ai.features import component, cve
+from aegis_ai.features import _extract_tools_used, component, cve
 from aegis_ai.features.cve import QualityReview
 from aegis_ai.features.cve.data_models import (
     CATEGORY_WEIGHTS,
@@ -297,6 +299,64 @@ class TestBuildCveInput:
         assert "title=" in r
         assert "None" not in r
         assert "components" not in r
+
+
+def _fake_agent_run_result(tool_names):
+    """Build a minimal AgentRunResult stub with the given tool call names."""
+    from pydantic_ai._agent_graph import GraphAgentState
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.run import AgentRunResult
+    from pydantic_ai.usage import RequestUsage, RunUsage
+
+    parts = [
+        ToolCallPart(tool_name=name, tool_call_id=f"c{i}")
+        for i, name in enumerate(tool_names)
+    ]
+    msg = ModelResponse(
+        parts=parts,
+        usage=RequestUsage(),
+        timestamp=datetime.now(timezone.utc),
+    )
+    state = GraphAgentState(
+        message_history=[msg],
+        usage=RunUsage(),
+        run_id="test",
+        conversation_id="test",
+        pending_messages=[],
+        event_stream_buffer=[],
+        mcp_tool_defs_cache={},
+    )
+    return AgentRunResult(
+        output=None,
+        _output_tool_name=None,
+        _state=state,
+        _new_message_index=0,
+        _traceparent_value=None,
+    )
+
+
+class TestExtractToolsUsed:
+    """Tests for _extract_tools_used() that derives tools_used from message history."""
+
+    def test_extracts_tool_names_in_order(self):
+        result = _fake_agent_run_result(["osidb_tool", "cwe_tool"])
+        assert _extract_tools_used(result) == ["osidb_tool", "cwe_tool"]
+
+    def test_filters_out_final_result(self):
+        result = _fake_agent_run_result(["osidb_tool", "final_result"])
+        assert _extract_tools_used(result) == ["osidb_tool"]
+
+    def test_final_result_only_returns_empty(self):
+        result = _fake_agent_run_result(["final_result"])
+        assert _extract_tools_used(result) == []
+
+    def test_deduplicates_preserving_order(self):
+        result = _fake_agent_run_result(["osidb_tool", "cwe_tool", "osidb_tool"])
+        assert _extract_tools_used(result) == ["osidb_tool", "cwe_tool"]
+
+    def test_no_tool_calls_returns_empty(self):
+        result = _fake_agent_run_result([])
+        assert _extract_tools_used(result) == []
 
 
 async def test_suggest_impact_with_bad_cve_test_model():
