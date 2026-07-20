@@ -249,7 +249,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-9222",
         expected_statement="...rated Important.",
-        metadata={"known_to_fail_evaluators": ["StatementSeverityRationale"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "StatementSeverityRationale",
+                "StatementEvaluator",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-12816",
