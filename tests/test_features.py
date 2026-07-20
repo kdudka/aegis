@@ -256,6 +256,40 @@ class TestBuildCveInput:
         result = cve._build_cve_input("CVE-2025-1234", ctx)
         assert result.description == "NVD description text."
 
+    def test_description_precedence_comment_zero_wins(self):
+        ctx = {
+            "comment_zero": "from comment_zero",
+            "cve_description": "from cve_description",
+            "description": "from description",
+        }
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.description == "from comment_zero"
+
+    def test_description_precedence_cve_description_over_description(self):
+        ctx = {
+            "cve_description": "from cve_description",
+            "description": "from description",
+        }
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.description == "from cve_description"
+
+    def test_description_fallback_to_description_key(self):
+        ctx = {"description": "from description"}
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.description == "from description"
+
+    def test_non_dict_static_context_none(self):
+        result = cve._build_cve_input("CVE-2025-1234", None)
+        assert result.cve_id == "CVE-2025-1234"
+        assert result.title is None
+        assert result.description is None
+
+    def test_non_dict_static_context_list(self):
+        result = cve._build_cve_input("CVE-2025-1234", ["unexpected", "list"])
+        assert result.cve_id == "CVE-2025-1234"
+        assert result.title is None
+        assert result.description is None
+
     def test_repr_omits_none_fields(self):
         inp = cve.CVEFeatureInput(cve_id="CVE-2025-1234", title="Test")
         r = repr(inp)
