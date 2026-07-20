@@ -21,7 +21,6 @@ from evals.features.common import (
     reflect_confidence,
     run_evaluation,
 )
-from evals.utils.osidb_cache import read_cache_json
 
 
 class QualityReviewCase(Case):
@@ -182,11 +181,8 @@ class MitigationRewriteRulesEvaluator(Evaluator[str, QualityReviewModel]):
 
 async def quality_review(cve_id: CVEID) -> QualityReviewModel:
     """Run quality-review against the given CVE using cached OSIDB data."""
-    static_context = read_cache_json(str(cve_id))
-    if static_context is None:
-        raise AssertionError(f"Missing/invalid OSIDB cache for {cve_id}")
     feature = QualityReview(rh_feature_agent)
-    result = await feature.exec(cve_id, static_context=static_context)
+    result = await feature.exec(cve_id)
     return result.output
 
 
