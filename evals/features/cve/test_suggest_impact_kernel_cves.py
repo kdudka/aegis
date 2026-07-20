@@ -81,64 +81,6 @@ SEVERITY_RANK = {"CRITICAL": 0, "IMPORTANT": 1, "MODERATE": 2, "LOW": 3, "NONE":
 # To waive an evaluator for a case, add its CVE ID here.  Review
 # kernel_eval_results.json after each run to confirm before waiving.
 KNOWN_FAILURES: dict[str, dict] = {
-    "CVE-2023-54247": {
-        "known_to_fail_evaluators": ["UnderestimationEvaluator"],
-        "reason": (
-            "Known NONE/LOW underestimation in current eval run "
-            "(predicted NONE vs expected LOW)."
-        ),
-    },
-    "CVE-2023-54209": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "LLM explanation non-deterministically mentions that enabling blktrace via "
-            "ioctl 'typically requires CAP_SYS_ADMIN' without describing an unprivileged "
-            "alternative, making PR:L appear inconsistent. However, the OSIDB ground-truth "
-            "vector uses PR:L, and on other runs the explanation correctly states the "
-            "operations can be available to unprivileged users. Non-deterministic LLM "
-            "narration issue; the vector is correct."
-        ),
-    },
-    "CVE-2023-54258": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "LLM explanation non-deterministically describes the unmount operation as "
-            "privileged while correctly assigning PR:L in the vector (matching OSIDB "
-            "ground truth). The attacker's contribution is having open files during an "
-            "admin-initiated unmount, which does not require elevated privileges. "
-            "Same pattern as CVE-2025-39718."
-        ),
-    },
-    "CVE-2023-54081": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "CVSS vector uses S:C but explanation states impact is contained within "
-            "the guest VM without crossing a security boundary, implying S:U. "
-            "Scope narration inconsistent with vector."
-        ),
-    },
-    "CVE-2023-54181": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "LLM explanation states that CAP_BPF and CAP_NET_ADMIN are required "
-            "(admin-class capabilities) with no plausible unprivileged alternative, "
-            "while the CVSS vector uses PR:L. Explanation-vs-vector inconsistency."
-        ),
-    },
-    "CVE-2025-39682": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "LLM explanation states C:N, I:N but CVSS vector specifies C:L, I:L. "
-            "Explanation-vs-vector inconsistency."
-        ),
-    },
-    "CVE-2025-39718": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "LLM explanation inconsistent with its own vector: explanation states C:H/I:L "
-            "but vector has C:L/I:H. Scope/privilege narration does not match the vector."
-        ),
-    },
     "CVE-2022-50836": {
         "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
         "reason": (
@@ -162,18 +104,91 @@ KNOWN_FAILURES: dict[str, dict] = {
             "no privileges are required."
         ),
     },
-    "CVE-2025-68742": {
+    "CVE-2022-50873": {
         "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
         "reason": (
-            "On one run, the explanation-revision step only prompts the LLM to reconcile "
-            "what changed during post-processing, but the original LLM response already had "
-            "an internal C/I/PR mismatch between its prose and its own vector — and that "
-            "pre-existing inconsistency was invisible to the revision logic. Specifically, "
-            "the LLM emitted I:N in the vector but wrote 'minor integrity impact (I:L)' in "
-            "the explanation. Post-processing changed only impact (LOW -> MODERATE) and "
-            "score (3.8 -> 4.1); the vector itself was not modified, so metric_changed was "
-            "empty and the revision prompt did not instruct the LLM to reconcile the "
-            "explanation text with the unchanged C/I/PR metrics."
+            "The explanation for PR:L states that 'Unloading modules or removing devices "
+            "typically requires elevated capabilities, but not necessarily full "
+            "administrative privileges.' However, unloading kernel modules or removing "
+            "PCI devices are generally considered admin-only operations. The explanation "
+            "does not describe a plausible unprivileged alternative for these actions, "
+            "making PR:L inconsistent with the described trigger path according to the "
+            "rubric's consistency rule for PR."
+        ),
+    },
+    "CVE-2023-53510": {
+        "known_to_fail_evaluators": ["UnderestimationEvaluator"],
+        "reason": "LLM non-determinism (predicted LOW, expected MODERATE).",
+    },
+    "CVE-2023-53669": {
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + remote + skb features; classifier MODERATE (conf=0.02) "
+            "but escalated — kpanic overestimation signal. Also: LLM non-deterministically "
+            "emits I:N in vector while explanation describes I:L."
+        ),
+    },
+    "CVE-2023-53764": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2023-54081": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "CVSS vector uses S:C but explanation states impact is contained within "
+            "the guest VM without crossing a security boundary, implying S:U. "
+            "Scope narration inconsistent with vector."
+        ),
+    },
+    "CVE-2023-54181": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "LLM explanation states that CAP_BPF and CAP_NET_ADMIN are required "
+            "(admin-class capabilities) with no plausible unprivileged alternative, "
+            "while the CVSS vector uses PR:L. Explanation-vs-vector inconsistency."
+        ),
+    },
+    "CVE-2023-54209": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "LLM explanation non-deterministically mentions that enabling blktrace via "
+            "ioctl 'typically requires CAP_SYS_ADMIN' without describing an unprivileged "
+            "alternative, making PR:L appear inconsistent. However, the OSIDB ground-truth "
+            "vector uses PR:L, and on other runs the explanation correctly states the "
+            "operations can be available to unprivileged users. Non-deterministic LLM "
+            "narration issue; the vector is correct."
+        ),
+    },
+    "CVE-2023-54222": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected LOW. "
+            "kernel_panic + outofbounds features; classifier IMPORTANT (conf=0.91). "
+            "Two-band kpanic overestimation (LOW->IMPORTANT)."
+        ),
+    },
+    "CVE-2023-54247": {
+        "known_to_fail_evaluators": ["UnderestimationEvaluator"],
+        "reason": (
+            "Known NONE/LOW underestimation in current eval run "
+            "(predicted NONE vs expected LOW)."
+        ),
+    },
+    "CVE-2023-54258": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "LLM explanation non-deterministically describes the unmount operation as "
+            "privileged while correctly assigning PR:L in the vector (matching OSIDB "
+            "ground truth). The attacker's contribution is having open files during an "
+            "admin-initiated unmount, which does not require elevated privileges. "
+            "Same pattern as CVE-2025-39718."
         ),
     },
     "CVE-2024-53104": {
@@ -187,59 +202,11 @@ KNOWN_FAILURES: dict[str, dict] = {
             "user-data impact path.'"
         ),
     },
-    "CVE-2022-50873": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "The explanation for PR:L states that 'Unloading modules or removing devices "
-            "typically requires elevated capabilities, but not necessarily full "
-            "administrative privileges.' However, unloading kernel modules or removing "
-            "PCI devices are generally considered admin-only operations. The explanation "
-            "does not describe a plausible unprivileged alternative for these actions, "
-            "making PR:L inconsistent with the described trigger path according to the "
-            "rubric's consistency rule for PR."
-        ),
-    },
-    "CVE-2025-68305": {
-        "known_to_fail_evaluators": [
-            "CVSSKernelScopeAndPrivileges",
-            "KpanicOverestimationEvaluator",
-        ],
+    "CVE-2025-37798": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
         "reason": (
             "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "kernel_panic + remote + uaf + danger features; classifier starts at "
-            "IMPORTANT (conf=0.63), LLM CVSS 7.0 (MODERATE band) but no rule "
-            "de-escalates. Also: explanation only describes DoS but vector sets C:H/I:H."
-        ),
-    },
-    "CVE-2025-39905": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "The explanation for C states 'limited disclosure of sensitive information' "
-            "and for I states 'limited modification of system data or state', but the "
-            "CVSS vector uses C:H and I:H. Descriptions of 'limited' impact are "
-            "inconsistent with High ratings for C and I."
-        ),
-    },
-    "CVE-2025-71182": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "The explanation for PR:L states that the attacker needs privileges typically "
-            "involving CAP_NET_ADMIN. However, it does not provide a plausible unprivileged "
-            "alternative (e.g., via user namespaces) to justify PR:L when CAP_NET_ADMIN is "
-            "generally considered an admin-class capability. Explanation-vs-vector "
-            "inconsistency. Same pattern as CVE-2023-54181."
-        ),
-    },
-    "CVE-2023-53669": {
-        "known_to_fail_evaluators": [
-            "CVSSKernelScopeAndPrivileges",
-            "KpanicOverestimationEvaluator",
-        ],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "kernel_panic + remote + skb features; classifier MODERATE (conf=0.02) "
-            "but escalated — kpanic overestimation signal. Also: LLM non-deterministically "
-            "emits I:N in vector while explanation describes I:L."
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
         ),
     },
     "CVE-2025-37803": {
@@ -261,6 +228,60 @@ KNOWN_FAILURES: dict[str, dict] = {
             "a plausible user-data impact path as required by the rubric."
         ),
     },
+    "CVE-2025-38718": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + networking + packet features; classifier starts "
+            "IMPORTANT (conf=0.11) despite low confidence — kpanic overestimation."
+        ),
+    },
+    "CVE-2025-39677": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39682": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "LLM explanation states C:N, I:N but CVSS vector specifies C:L, I:L. "
+            "Explanation-vs-vector inconsistency."
+        ),
+    },
+    "CVE-2025-39718": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "LLM explanation inconsistent with its own vector: explanation states C:H/I:L "
+            "but vector has C:L/I:H. Scope/privilege narration does not match the vector."
+        ),
+    },
+    "CVE-2025-39809": {
+        "known_to_fail_evaluators": [
+            "KpanicOverestimationEvaluator",
+        ],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE — "
+            "kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39810": {
+        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-39905": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "The explanation for C states 'limited disclosure of sensitive information' "
+            "and for I states 'limited modification of system data or state', but the "
+            "CVSS vector uses C:H and I:H. Descriptions of 'limited' impact are "
+            "inconsistent with High ratings for C and I."
+        ),
+    },
     "CVE-2025-40248": {
         "known_to_fail_evaluators": ["UnderestimationEvaluator"],
         "reason": (
@@ -268,21 +289,47 @@ KNOWN_FAILURES: dict[str, dict] = {
             "(predicted MODERATE vs expected IMPORTANT)."
         ),
     },
-    "CVE-2026-23074": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
-        "reason": (
-            "Explanation for S:C describes privilege escalation to elevated system "
-            "access but the CVSS vector uses S:U. Scope narration inconsistent "
-            "with vector."
-        ),
-    },
-    # -- Kernel-panic overestimation waivers (AEGIS-441) --
-    "CVE-2025-38718": {
+    "CVE-2025-40320": {
         "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
         "reason": (
             "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "kernel_panic + networking + packet features; classifier starts "
-            "IMPORTANT (conf=0.11) despite low confidence — kpanic overestimation."
+            "AEGIS-441 benchmark — kpanic-driven overescalation."
+        ),
+    },
+    "CVE-2025-68305": {
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
+        "reason": (
+            "Overestimation: predicted IMPORTANT, expected MODERATE. "
+            "kernel_panic + remote + uaf + danger features; classifier starts at "
+            "IMPORTANT (conf=0.63), LLM CVSS 7.0 (MODERATE band) but no rule "
+            "de-escalates. Also: explanation only describes DoS but vector sets C:H/I:H."
+        ),
+    },
+    "CVE-2025-68742": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "On one run, the explanation-revision step only prompts the LLM to reconcile "
+            "what changed during post-processing, but the original LLM response already had "
+            "an internal C/I/PR mismatch between its prose and its own vector — and that "
+            "pre-existing inconsistency was invisible to the revision logic. Specifically, "
+            "the LLM emitted I:N in the vector but wrote 'minor integrity impact (I:L)' in "
+            "the explanation. Post-processing changed only impact (LOW -> MODERATE) and "
+            "score (3.8 -> 4.1); the vector itself was not modified, so metric_changed was "
+            "empty and the revision prompt did not instruct the LLM to reconcile the "
+            "explanation text with the unchanged C/I/PR metrics."
+        ),
+    },
+    "CVE-2025-71182": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "reason": (
+            "The explanation for PR:L states that the attacker needs privileges typically "
+            "involving CAP_NET_ADMIN. However, it does not provide a plausible unprivileged "
+            "alternative (e.g., via user namespaces) to justify PR:L when CAP_NET_ADMIN is "
+            "generally considered an admin-class capability. Explanation-vs-vector "
+            "inconsistency. Same pattern as CVE-2023-54181."
         ),
     },
     "CVE-2026-22998": {
@@ -302,58 +349,12 @@ KNOWN_FAILURES: dict[str, dict] = {
             "overescalation."
         ),
     },
-    "CVE-2023-54222": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+    "CVE-2026-23074": {
+        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
         "reason": (
-            "Overestimation: predicted IMPORTANT, expected LOW. "
-            "kernel_panic + outofbounds features; classifier IMPORTANT (conf=0.91). "
-            "Two-band kpanic overestimation (LOW->IMPORTANT)."
-        ),
-    },
-    "CVE-2023-53510": {
-        "known_to_fail_evaluators": ["UnderestimationEvaluator"],
-        "reason": "LLM non-determinism (predicted LOW, expected MODERATE).",
-    },
-    "CVE-2023-53764": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
-        ),
-    },
-    "CVE-2025-37798": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
-        ),
-    },
-    "CVE-2025-39677": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
-        ),
-    },
-    "CVE-2025-39809": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
-        ),
-    },
-    "CVE-2025-39810": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
-        ),
-    },
-    "CVE-2025-40320": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
-        "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
+            "Explanation for S:C describes privilege escalation to elevated system "
+            "access but the CVSS vector uses S:U. Scope narration inconsistent "
+            "with vector."
         ),
     },
 }

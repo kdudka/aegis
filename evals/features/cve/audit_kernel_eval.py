@@ -59,16 +59,16 @@ def direction(predicted: str, expected: str) -> str:
 
 
 def _kpanic_mechanism(
-    clf_features: set[str], clf_impact: str | None,
+    clf_features: set[str],
+    clf_impact: str | None,
 ) -> str:
     """Identify which rule/guardrail drove a kernel-panic overestimation.
 
     Only called when ``kernel_panic`` is in *clf_features* (the caller
     gates on that), so every branch assumes kpanic is present.
     """
-    if (
-        bool(clf_features & NETWORK_EXPOSURE_FLAGS)
-        and bool(clf_features & MEMORY_CORRUPTION_FLAGS)
+    if bool(clf_features & NETWORK_EXPOSURE_FLAGS) and bool(
+        clf_features & MEMORY_CORRUPTION_FLAGS
     ):
         return "g3_network_corruption_floor"
     if "kernel_panic_plus_uaf" in clf_features:
