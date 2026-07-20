@@ -274,10 +274,15 @@ KNOWN_FAILURES: dict[str, dict] = {
         ),
     },
     "CVE-2025-39810": {
-        "known_to_fail_evaluators": ["KpanicOverestimationEvaluator"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "Overestimation: predicted IMPORTANT, expected MODERATE. "
-            "AEGIS-441 benchmark — kpanic-driven overescalation."
+            "Overestimation: predicted IMPORTANT, expected MODERATE — "
+            "kpanic-driven overescalation. Also: explanation for I:H describes "
+            "kernel memory corruption and heap structure compromise without a "
+            "plausible user-data impact path."
         ),
     },
     "CVE-2025-39905": {
