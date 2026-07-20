@@ -244,10 +244,14 @@ KNOWN_FAILURES: dict[str, dict] = {
         ),
     },
     "CVE-2025-39682": {
-        "known_to_fail_evaluators": ["CVSSKernelScopeAndPrivileges"],
+        "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
+            "KpanicOverestimationEvaluator",
+        ],
         "reason": (
-            "LLM explanation states C:N, I:N but CVSS vector specifies C:L, I:L. "
-            "Explanation-vs-vector inconsistency."
+            "Overestimation: predicted IMPORTANT, expected MODERATE — "
+            "kpanic-driven overescalation. Also: LLM explanation states "
+            "C:N, I:N but CVSS vector specifies C:L, I:L."
         ),
     },
     "CVE-2025-39718": {
