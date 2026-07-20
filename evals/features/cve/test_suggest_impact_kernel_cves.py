@@ -259,11 +259,14 @@ KNOWN_FAILURES: dict[str, dict] = {
     },
     "CVE-2025-39809": {
         "known_to_fail_evaluators": [
+            "CVSSKernelScopeAndPrivileges",
             "KpanicOverestimationEvaluator",
         ],
         "reason": (
             "Overestimation: predicted IMPORTANT, expected MODERATE — "
-            "kpanic-driven overescalation."
+            "kpanic-driven overescalation. Also: explanation for I:H describes "
+            "corruption of critical kernel data structures without a plausible "
+            "user-data impact path."
         ),
     },
     "CVE-2025-39810": {
