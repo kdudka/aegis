@@ -337,8 +337,9 @@ class FlawUpdater:
         if not any_update:
             self.updated_fields.discard(_KERNEL_FLAGS_KEY)
 
-    async def do(self) -> None:
+    async def do(self) -> bool:
         assert self.flaw_data
+        processed: bool = False
 
         # validate eligibility on the fresh flaw data to avoid TOCTOU
         try:
@@ -352,12 +353,12 @@ class FlawUpdater:
                 raise
 
         # apply suggestions
-        all_ok = await self.apply_suggestions()
+        all_ok: bool = await self.apply_suggestions()
 
         if self.read_only:
             msg = f"read-only mode, skipping OSIDB update of {self.updated_fields}"
             self._warn(msg)
-            return
+            return False
 
         # mark the flaw as processed by Aegis/osidb-bot
         aegis_meta = self.flaw_data.setdefault("aegis_meta", {})
@@ -382,6 +383,7 @@ class FlawUpdater:
                 )
 
             # successfully processed (we do not retry when only label creation fails)
+            processed = True
             self.retry_list.pop(self.cve, None)
 
         except Exception as e:
@@ -417,6 +419,8 @@ class FlawUpdater:
 
         if not all_ok:
             self.create_alias_label("manual-triage")
+
+        return processed
 
 
 class Bot(StateProxy):
@@ -476,7 +480,7 @@ class Bot(StateProxy):
         self.retry_list[cve] = self.max_retries
         return True
 
-    async def process_cve(self, cve: CVEID) -> None:
+    async def process_cve(self, cve: CVEID) -> bool:
         flaw_updater: Optional[FlawUpdater] = None
 
         try:
@@ -489,9 +493,12 @@ class Bot(StateProxy):
                 retry_list=self.retry_list,
                 on_failure=self.schedule_retry,
             )
+
             if not self.retrying_failed:
-                self.pending[flaw_updater.position()] = True  # mark as pending
-            await flaw_updater.do()
+                # mark as pending
+                self.pending[flaw_updater.position()] = True
+
+            return await flaw_updater.do()
 
         except BaseException as e:
             # something has failed
@@ -512,11 +519,14 @@ class Bot(StateProxy):
                 # propagate all but RuntimeError exceptions
                 raise
 
+            return False
+
         finally:
             if self.retrying_failed:
                 self.decrement_retry(cve)
             elif flaw_updater:
-                self.pending[flaw_updater.position()] = False  # mark as done
+                # mark as done
+                self.pending[flaw_updater.position()] = False
 
             # determine the next state
             next_state: Optional[BotPosition] = None
@@ -537,13 +547,17 @@ class Bot(StateProxy):
 
     async def _process_cve_list(self, cve_ids: Sequence[CVEID] = ()) -> None:
         total: int = len(cve_ids)
+        processed: int = 0
 
         async def process_cve_bounded(i: int, cve: CVEID) -> None:
+            nonlocal processed
+
             async with max_jobs_sem:
                 logger.info(f"[{i}/{total}] processing {cve}")
                 log_memory(f"cve_start({cve})")
                 try:
-                    await self.process_cve(cve)
+                    if await self.process_cve(cve):
+                        processed += 1
                 except Exception as e:
                     msg = f"{cve}: unhandled exception: {e.__class__.__name__}"
                     logger.warning(msg)
@@ -555,7 +569,7 @@ class Bot(StateProxy):
             *[process_cve_bounded(*job) for job in enumerate(cve_ids, start=1)]
         )
         log_memory("batch_end")
-        logger.info(f"processed {total} CVEs")
+        logger.info(f"processed {processed} out of {total} CVEs")
 
     async def process(self, cve_ids: Sequence[CVEID] = ()) -> None:
         if not cve_ids:
