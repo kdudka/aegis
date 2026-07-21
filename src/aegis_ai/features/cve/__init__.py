@@ -543,6 +543,7 @@ class SuggestCWE(Feature):
             goals="""
                 - Prefer the most specific CWE over broad parents.
                 - Prefer the directly observable/exploitable weakness over abstract root causes. For example, if a missing return-value check leads to a NULL pointer dereference, prefer CWE-476 (NULL Pointer Dereference) over CWE-252 (Unchecked Return Value).
+                - Distinguish between similar-sounding weaknesses. For example, a NULL pointer dereference (CWE-476) is not the same as an uninitialized pointer dereference (CWE-824). Match the CWE to the actual weakness described, not to a superficially similar one.
                 - Return a short explanation and confidence.
             """,
             rules="""
