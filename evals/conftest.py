@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import pytest
@@ -32,14 +33,21 @@ from evals.utils.kernel_patch_cache import (
 from evals.utils.external_references_cache import (
     cache_misses as extref_cache_misses,
     extref_cache_retrieve,
+    get_miss_files as get_extref_miss_files,
     write_misses_report as write_extref_misses_report,
 )
 from evals.utils.ghsa_cache import (
     cache_misses as ghsa_cache_misses,
+    get_miss_files as get_ghsa_miss_files,
     ghsa_cache_retrieve,
     write_misses_report as write_ghsa_misses_report,
 )
-from evals.utils.osidb_cache import osidb_cache_retrieve
+from evals.utils.osidb_cache import (
+    cache_misses as osidb_cache_misses,
+    get_miss_files as get_osidb_miss_files,
+    osidb_cache_retrieve,
+    write_misses_report as write_osidb_misses_report,
+)
 
 
 @Tool
@@ -252,6 +260,40 @@ def pytest_sessionfinish(session, exitstatus):
             "commit the new evals/external_references_cache/*.json files",
             len(extref_cache_misses),
             extref_misses_file,
+        )
+
+    osidb_misses_file = write_osidb_misses_report()
+    if osidb_misses_file:
+        logging.warning(
+            "[osidb_cache] %d cache miss(es) written to %s — "
+            "commit the new evals/osidb_cache/*.json files",
+            len(osidb_cache_misses),
+            osidb_misses_file,
+        )
+
+    # Dump cache-miss file contents as base64 so they can be imported from CI logs
+    cache_types = {
+        "external_references": get_extref_miss_files,
+        "ghsa": get_ghsa_miss_files,
+        "osidb": get_osidb_miss_files,
+    }
+    dump_count = 0
+    for cache_type, get_files in cache_types.items():
+        for path in get_files():
+            if path.exists():
+                b64 = base64.b64encode(path.read_bytes()).decode()
+                logging.info(
+                    "[cache-dump] type=%s file=%s base64=%s",
+                    cache_type,
+                    path.name,
+                    b64,
+                )
+                dump_count += 1
+    if dump_count:
+        logging.info(
+            "[cache-dump] %d file(s) dumped — "
+            "pipe this log through scripts/import_evals_cache.py to import",
+            dump_count,
         )
 
     logging.info(f"[pytest] exit status: {session.exitstatus}")
