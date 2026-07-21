@@ -53,3 +53,8 @@ def write_misses_report() -> Path | None:
     report = Path(GHSA_CACHE_DIR) / "MISSES.txt"
     report.write_text("\n".join(sorted(cache_misses)) + "\n", encoding="utf-8")
     return report
+
+
+def get_miss_files() -> list[Path]:
+    """Return paths to cache files written during this session (misses)."""
+    return [Path(GHSA_CACHE_DIR) / f"{vuln_id}.json" for vuln_id in cache_misses]

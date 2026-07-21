@@ -60,3 +60,8 @@ def write_misses_report() -> Path | None:
     report = Path(CACHE_DIR) / "MISSES.txt"
     report.write_text("\n".join(sorted(cache_misses)) + "\n", encoding="utf-8")
     return report
+
+
+def get_miss_files() -> list[Path]:
+    """Return paths to cache files written during this session (misses)."""
+    return [Path(CACHE_DIR) / f"{cache_key_for_url(url)}.json" for url in cache_misses]
