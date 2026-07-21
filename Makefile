@@ -1,6 +1,6 @@
 PYTHON ?= python
 
-all: check test test-web
+all: check test test-web check-openapi
 
 install:
 	pip install . --force
@@ -61,6 +61,20 @@ test:
 
 test-web:
 	uv run pytest src/aegis_ai_web/tests
+
+############################################################################
+# openapi docs
+############################################################################
+generate-openapi:
+	PYTHONPATH=. uv run python scripts/generate_openapi.py
+
+check-openapi:
+	@tmpdir=$$(mktemp -d) && \
+	trap 'rm -rf "$$tmpdir"' EXIT && \
+	PYTHONPATH=. uv run python scripts/generate_openapi.py "$$tmpdir" && \
+	diff -u docs/openapi.json "$$tmpdir/openapi.json" && \
+	diff -u docs/openapi.yml "$$tmpdir/openapi.yml" && \
+	echo "OpenAPI docs are up to date."
 
 fetch-deps:
 	uv sync --frozen --extra=classifier_deps
