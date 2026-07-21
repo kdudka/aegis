@@ -542,7 +542,12 @@ class Bot(StateProxy):
             async with max_jobs_sem:
                 logger.info(f"[{i}/{total}] processing {cve}")
                 log_memory(f"cve_start({cve})")
-                await self.process_cve(cve)
+                try:
+                    await self.process_cve(cve)
+                except Exception as e:
+                    msg = f"{cve}: unhandled exception: {e.__class__.__name__}"
+                    logger.warning(msg)
+                    logger.debug("%s: %s", cve, e)
                 log_memory(f"cve_end({cve})")
 
         log_memory(f"batch_start({total} CVEs)")
