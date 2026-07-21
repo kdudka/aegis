@@ -68,7 +68,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$",
+              "pattern": "^CVE-[0-9]{4}-[0-9]{4,16}$",
               "title": "Cve Id"
             }
           },
@@ -227,7 +227,7 @@
                 "properties": {
                   "cve_id": {
                     "type": "string",
-                    "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$",
+                    "pattern": "^CVE-[0-9]{4}-[0-9]{4,16}$",
                     "description": "CVE identifier (e.g. CVE-2025-12345)"
                   },
                   "title": {
@@ -656,7 +656,7 @@
         "properties": {
           "cve_id": {
             "type": "string",
-            "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$",
+            "pattern": "^CVE-[0-9]{4}-[0-9]{4,16}$",
             "title": "Cve Id",
             "description": "CVE identifier (e.g. CVE-2025-12345)"
           },
@@ -761,7 +761,7 @@
               {
                 "type": "string",
                 "maxLength": 50,
-                "pattern": "^CVE-[0-9]{4}-[0-9]{4,7}$"
+                "pattern": "^CVE-[0-9]{4}-[0-9]{4,16}$"
               },
               {
                 "type": "null"

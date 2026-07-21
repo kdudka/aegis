@@ -19,4 +19,4 @@ def test_cveid_validator():
     with pytest.raises(ValidationError) as excinfo:
         cve_id = "BAD-CVE-4"
         assert cveid_validator.validate_python(cve_id)
-    assert "String should match pattern '^CVE-[0-9]{4}-[0-9]{4,7}$'" in str(excinfo)
+    assert "String should match pattern '^CVE-[0-9]{4}-[0-9]{4,16}$'" in str(excinfo)
