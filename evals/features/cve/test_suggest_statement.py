@@ -232,6 +232,7 @@ cases = [
                 # Aegis recommends mkinitcpio -P for Fedora but Fedora uses dracut
                 "MitigationWellFormedCommands",
                 "StatementEvaluator",
+                "StatementNoDuplicatedInfo",
             ]
         },
     ),
