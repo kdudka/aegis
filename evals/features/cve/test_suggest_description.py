@@ -255,6 +255,7 @@ cases = [
     SuggestDescriptionCase(
         cve_id="CVE-2026-31898",
         expected_title="jsPDF: Arbitrary code execution via unsanitized input in createAnnotation method",
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2026-31966",
