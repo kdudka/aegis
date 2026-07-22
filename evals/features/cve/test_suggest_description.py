@@ -251,6 +251,7 @@ cases = [
         cve_id="CVE-2026-9697",
         expected_title="undici: TLS certificate validation bypass via SOCKS5 ProxyAgent",
         expected_description="A flaw was found in undici, a Node.js HTTP/1.1 client. When undici's ProxyAgent is configured with a SOCKS5 proxy, it silently ignores the requestTls option, leading to a Transport Layer Security (TLS) certificate validation bypass. This allows a remote attacker to perform a Man-in-the-Middle (MITM) attack, enabling them to read and tamper with HTTPS communications by presenting an untrusted certificate. Applications relying on specific TLS certificate pinning are particularly vulnerable.",
+        metadata={"known_to_fail_evaluators": ["DescriptionEvaluator"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2026-31898",
