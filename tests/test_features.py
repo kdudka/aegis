@@ -227,7 +227,7 @@ class TestBuildCveInput:
             "statement": "Red Hat is aware.",
             "mitigation": "Disable the module.",
             "comment_zero": "Buffer overflow in net subsystem.",
-            "comments": "Additional context.",
+            "comments": [],
             "components": ["kernel"],
             "references": [{"url": "https://example.com"}],
             "affects": [{"ps_module": "rhel-9"}],
@@ -247,7 +247,7 @@ class TestBuildCveInput:
         assert result.statement == "Red Hat is aware."
         assert result.mitigation == "Disable the module."
         assert result.comment_zero == "Buffer overflow in net subsystem."
-        assert result.comments == "Additional context."
+        assert result.comments == []
         assert result.components == ["kernel"]
         assert result.references == [{"url": "https://example.com"}]
         assert result.affects == [{"ps_module": "rhel-9"}]
