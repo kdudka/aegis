@@ -16,9 +16,8 @@ from aegis_ai.features.cve.data_models import (
 )
 from tests.utils.llm_cache import get_cached_response, cache_response
 
-pytestmark = pytest.mark.asyncio
 
-
+@pytest.mark.asyncio
 async def test_suggest_impact_with_test_model():
     test_name = "test_suggest_impact_with_test_model"
 
@@ -40,6 +39,7 @@ async def test_suggest_impact_with_test_model():
     )
 
 
+@pytest.mark.asyncio
 async def test_suggest_cwe_with_test_model(set_test_allowed_cwe_ids_env_var):
     test_name = "test_suggest_cwe_with_test_model"
 
@@ -55,6 +55,7 @@ async def test_suggest_cwe_with_test_model(set_test_allowed_cwe_ids_env_var):
     assert suggestcwe.cwe == ["CWE-190"]
 
 
+@pytest.mark.asyncio
 async def test_identify_pii_with_test_model():
     test_name = "test_identify_pii_with_test_model"
     cve_id = "CVE-2025-0725"
@@ -71,6 +72,7 @@ async def test_identify_pii_with_test_model():
     assert not piireport.contains_PII  # is false
 
 
+@pytest.mark.asyncio
 async def test_suggest_description_with_test_model():
     test_name = "test_suggest_description_with_test_model"
 
@@ -91,6 +93,7 @@ async def test_suggest_description_with_test_model():
     )
 
 
+@pytest.mark.asyncio
 async def test_suggest_statement_with_test_model():
     test_name = "test_suggest_statement_with_test_model"
 
@@ -111,6 +114,7 @@ async def test_suggest_statement_with_test_model():
     )
 
 
+@pytest.mark.asyncio
 async def test_cvss_diff_explain_with_test_model():
     test_name = "test_cvss_diff_explain_with_test_model"
 
@@ -129,6 +133,7 @@ async def test_cvss_diff_explain_with_test_model():
     )
 
 
+@pytest.mark.asyncio
 async def test_component_intelligence_test_model():
     test_name = "test_component_intelligence_test_model"
 
@@ -149,6 +154,7 @@ async def test_component_intelligence_test_model():
     assert componentintelligence.confidence == 0.95
 
 
+@pytest.mark.asyncio
 async def test_quality_review_with_test_model():
     test_name = "test_quality_review_with_test_model"
 
@@ -359,6 +365,7 @@ class TestExtractToolsUsed:
         assert _extract_tools_used(result) == []
 
 
+@pytest.mark.asyncio
 async def test_suggest_impact_with_bad_cve_test_model():
     with pytest.raises(ValidationError) as excinfo:
         await cve.SuggestImpact(rh_feature_agent).exec("BAD-CVE-ID")
