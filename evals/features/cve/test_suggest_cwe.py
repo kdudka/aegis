@@ -191,13 +191,7 @@ cases = [
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53116",
-        cwe_list=["CWE-763"],
-        metadata={
-            "known_to_fail_evaluators": [
-                "SuggestCweEvaluator",
-                "CWEExplanationRootCause",
-            ]
-        },
+        cwe_list=["CWE-825"],  # kdudka: expected CWE-825
     ),
     SuggestCweCase(
         cve_id="CVE-2023-53123",
