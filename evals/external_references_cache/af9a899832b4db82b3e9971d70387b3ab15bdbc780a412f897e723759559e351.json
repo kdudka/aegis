@@ -1,0 +1,10 @@
+{
+    "url": "https://git.kernel.org/stable/c/79d138d137b80eeb0a83244d1cff29d64cf91067",
+    "result": {
+        "status": "error",
+        "error_message": "HTTP 404",
+        "url": "https://git.kernel.org/stable/c/79d138d137b80eeb0a83244d1cff29d64cf91067",
+        "content_type": null,
+        "extracted_text": null
+    }
+}
