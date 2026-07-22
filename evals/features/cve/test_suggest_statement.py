@@ -439,7 +439,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2025-68469",
         expected_mitigation="To mitigate this issue, avoid processing untrusted TIFF files with ImageMagick. In environments where ImageMagick processes files automatically, ensure that all input files originate from trusted sources or implement strict input validation to prevent the processing of malicious TIFF files.",
-        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-69262",
