@@ -529,8 +529,9 @@ class Bot(StateProxy):
                 self.pending[flaw_updater.position()] = False
 
             # determine the next state
+            pkeys = self.pending.keys()
             next_state: Optional[BotPosition] = None
-            for s in sorted(self.pending.keys(), key=lambda s: s.created_dt):
+            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min):
                 if self.pending[s]:
                     # this CVE is still being processed
                     break
