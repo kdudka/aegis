@@ -6,6 +6,7 @@ OSIDB workflow reverts from MANUAL back to DEFAULT, allowing the Aegis bot
 to pick them up again.
 """
 
+import asyncio
 import logging
 import textwrap
 
@@ -171,6 +172,46 @@ def process_cve(
         return "failed"
 
 
+async def process_all(
+    session: Any,
+    targets: list[str],
+    dry_run: bool,
+    jobs: int,
+) -> int:
+    """Process all CVEs with bounded concurrency. Return the number of failures."""
+    sem = asyncio.Semaphore(jobs)
+    total = len(targets)
+    reverted = 0
+    skipped = 0
+    failed = 0
+
+    async def bounded(i: int, cve_id: str) -> str:
+        async with sem:
+            logger.info("[%d/%d] processing %s", i, total, cve_id)
+            return await asyncio.to_thread(process_cve, session, cve_id, dry_run)
+
+    results = await asyncio.gather(
+        *[bounded(i, cve_id) for i, cve_id in enumerate(targets, 1)]
+    )
+
+    for result in results:
+        if result == "reverted":
+            reverted += 1
+        elif result == "skipped":
+            skipped += 1
+        else:
+            failed += 1
+
+    logger.info(
+        "summary: %d reverted, %d skipped, %d failed out of %d total",
+        reverted,
+        skipped,
+        failed,
+        total,
+    )
+    return failed
+
+
 @click.command()
 @click.option("--dry-run", is_flag=True, help="Log actions without making changes.")
 @click.option(
@@ -190,11 +231,18 @@ def process_cve(
     default=None,
     help="Upper bound on created_dt (ISO 8601).",
 )
+@click.option(
+    "--jobs",
+    type=click.IntRange(1, None),
+    default=1,
+    help="Number of CVEs to process concurrently (min: 1).",
+)
 def main(
     dry_run: bool,
     cve_ids: tuple[str, ...],
     created_after: Optional[datetime],
     created_before: Optional[datetime],
+    jobs: int,
 ) -> None:
     """Revert flaws from MANUAL to DEFAULT workflow by removing the manual-triage label."""
     if not cve_ids and created_after is None:
@@ -221,27 +269,9 @@ def main(
     if dry_run:
         logger.info("DRY RUN MODE — no changes will be made")
 
-    reverted = 0
-    skipped = 0
-    failed = 0
-
-    for i, cve_id in enumerate(targets, 1):
-        logger.info("[%d/%d] processing %s", i, len(targets), cve_id)
-        result = process_cve(session, cve_id, dry_run)
-        if result == "reverted":
-            reverted += 1
-        elif result == "skipped":
-            skipped += 1
-        else:
-            failed += 1
-
-    logger.info(
-        "summary: %d reverted, %d skipped, %d failed out of %d total",
-        reverted,
-        skipped,
-        failed,
-        len(targets),
-    )
+    failed = asyncio.run(process_all(session, targets, dry_run, jobs))
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
