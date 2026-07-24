@@ -1,5 +1,5 @@
 import logging
-from typing import List, Literal, Optional
+from typing import Literal
 
 import wikipedia
 from pydantic import Field

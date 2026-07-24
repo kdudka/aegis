@@ -12,7 +12,7 @@ import json
 import logging
 import re
 from html.parser import HTMLParser
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx

@@ -12,7 +12,6 @@ avoid anchoring the LLM on the classifier's output.
 
 import logging
 import re
-from typing import Dict, List, Optional
 
 from pydantic import Field
 from pydantic_ai import RunContext, Tool

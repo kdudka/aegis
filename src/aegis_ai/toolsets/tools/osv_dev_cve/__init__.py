@@ -7,7 +7,7 @@ Vulnerability (OSV) database API.
 deps: pip install requests
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import requests
 from pydantic import Field

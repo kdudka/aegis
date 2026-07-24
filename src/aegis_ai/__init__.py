@@ -9,7 +9,7 @@ import sys
 import warnings
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict, TypeIs
+from typing import Any, TypedDict, TypeIs
 from urllib.parse import urlparse
 
 import httpx

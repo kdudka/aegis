@@ -5,7 +5,7 @@ import json
 import logging
 import pathlib
 import time
-from typing import Any, Dict, Optional, TypeAlias
+from typing import Any
 
 import requests
 from pydantic import Field

@@ -10,7 +10,7 @@ import re
 import xml.etree.ElementTree as ET
 from math import log
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union, no_type_check
+from typing import no_type_check
 from zipfile import ZipFile
 
 import aiofiles
