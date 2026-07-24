@@ -18,7 +18,7 @@ jobs:
           sudo apt-get install -y libkrb5-dev
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
 
       - name: Install the project
         run: uv sync --all-extras --dev
