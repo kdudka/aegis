@@ -1,22 +1,22 @@
 # https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
 
-import requests
 import asyncio
-import logging
 import json
-import time
+import logging
 import pathlib
-from typing import Dict, Any, Optional, TypeAlias
-from requests import RequestException
+import time
+from typing import Any, Dict, Optional, TypeAlias
 
+import requests
 from pydantic import Field
 from pydantic_ai import RunContext, Tool
+from requests import RequestException
 
 from aegis_ai import get_settings
 from aegis_ai.toolsets.tools import (
-    default_tool_http_headers,
-    BaseToolOutput,
     BaseToolInput,
+    BaseToolOutput,
+    default_tool_http_headers,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ cache_dir = pathlib.Path(f"{get_settings().config_dir}/cisakev")
 cache_dir.mkdir(parents=True, exist_ok=True)
 
 CVEID: TypeAlias = str
-JsonBlob = Dict[str, Any]
+JsonBlob = dict[str, Any]
 
 
 class CISAToolInput(BaseToolInput):
@@ -112,7 +112,7 @@ class CISAClient:
                         return json.load(f)
                 else:
                     logger.info("Cache file found but is stale. Fetching fresh data.")
-            except (IOError, json.JSONDecodeError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 logger.warning(
                     f"Could not read cache file {self.cache_path}: {e}. Fetching fresh data."
                 )
@@ -136,12 +136,12 @@ class CISAClient:
             with self.cache_path.open("w", encoding="utf-8") as f:
                 json.dump(catalog_data, f)
             logger.info(f"Wrote fresh catalog data to cache: {self.cache_path}")
-        except IOError as e:
+        except OSError as e:
             logger.warning(f"Failed to write to cache file {self.cache_path}: {e}")
 
         return catalog_data
 
-    def get_vuln_by_cve(self, cve_id: str) -> Optional[JsonBlob]:
+    def get_vuln_by_cve(self, cve_id: str) -> JsonBlob | None:
         """
         Searches the loaded KEV catalog for a specific CVE ID.
         (This method remains the same, it just relies on the newly cached get_full_catalog)

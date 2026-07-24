@@ -3,7 +3,7 @@
 from typing import Annotated
 
 import cvss
-from pydantic import StringConstraints, TypeAdapter, BeforeValidator, BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field, StringConstraints, TypeAdapter
 
 
 def is_cvss_valid(cvss_str: str, cvss_fw: str = "CVSS3") -> bool:

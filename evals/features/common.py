@@ -5,11 +5,12 @@ import logging
 import math
 import os
 from collections import defaultdict
-from datetime import datetime, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
-from typing import Sequence, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,7 +36,6 @@ from aegis_ai import get_settings
 from aegis_ai.agents import agent_default_max_retries
 from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_503_DELAY_INIT
 from aegis_ai.features.data_models import AegisFeatureModel
-
 
 # minimal acceptable length of an explanation (where applicable)
 EXPLANATION_MIN_LEN = 80
@@ -241,7 +241,7 @@ def _format_suggest_affected_components_output(val: Any) -> str:
     return " ".join(parts) if parts else str(val)
 
 
-def _score_with_threshold_indicator(value: float | int) -> str:
+def _score_with_threshold_indicator(value: float) -> str:
     """Format score with pass/fail indicator based on MIN_SCORE_THRESHOLD."""
     if isinstance(value, float) and math.isnan(value):
         return "NaN [red]✗[/]"
@@ -555,7 +555,7 @@ def export_eval_results(
         )
 
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "name": report.name,
         "total_cases": len(report.cases) + len(report.failures),
         "evaluated": len(report.cases),

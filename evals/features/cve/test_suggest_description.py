@@ -1,22 +1,20 @@
-import pytest
 import re
 from typing import get_args
 
+import pytest
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator
 
 from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID
-from aegis_ai.features.cve import SuggestDescriptionText, SuggestDescriptionModel
-
+from aegis_ai.features.cve import SuggestDescriptionModel, SuggestDescriptionText
 from evals.features.common import (
+    FIELD_RUBRICS,
     common_feature_evals,
     create_llm_judge,
-    FIELD_RUBRICS,
     make_eval_reason,
     run_evaluation,
 )
-
 
 # some evaluators are only applicable if the expected output for a specific field is provided
 field_evaluators = {

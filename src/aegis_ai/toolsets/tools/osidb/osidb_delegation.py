@@ -18,7 +18,7 @@ import logging
 import os
 import threading
 import uuid
-from typing import Any, Optional, Union, cast
+from typing import Any, cast
 
 from osidb_bindings.bindings.python_client import AuthenticatedClient
 from osidb_bindings.bindings.python_client.api import auth as auth_api
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 _ccache_env_lock = threading.Lock()
 
 
-def _fetch_token_via_ccache(ccache_name: str, base: str) -> Optional[str]:
+def _fetch_token_via_ccache(ccache_name: str, base: str) -> str | None:
     """
     Call OSIDB GET /auth/token using KRB5CCNAME to force credential use from
     the given MEMORY ccache. HTTPSPNEGOAuth() without creds uses the default
@@ -77,7 +77,7 @@ def _fetch_token_via_ccache(ccache_name: str, base: str) -> Optional[str]:
                 os.environ.pop("KRB5_CLIENT_KTNAME", None)
 
 
-def _prepare_delegated_creds_for_thread(delegated_creds) -> Optional[str]:
+def _prepare_delegated_creds_for_thread(delegated_creds) -> str | None:
     """
     Store delegated creds in a MEMORY ccache for use in the worker thread.
     Returns the ccache name (e.g. MEMORY:abc123) or None if storage fails.
@@ -96,9 +96,9 @@ def _prepare_delegated_creds_for_thread(delegated_creds) -> Optional[str]:
 
 
 def get_osidb_token_for_delegated_cred(
-    delegated_creds_or_ccache: Union[Any, str],
+    delegated_creds_or_ccache: Any | str,
     osidb_base_url: str,
-) -> Optional[str]:
+) -> str | None:
     """
     Call OSIDB GET /auth/token with Negotiate using delegated creds.
 

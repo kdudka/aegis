@@ -1,12 +1,10 @@
 import pytest
-
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator
 
 from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID, is_cvss_valid
 from aegis_ai.features.cve import CVSSDiffExplainer, CVSSDiffExplainerModel
-
 from evals.features.common import (
     common_feature_evals,
     create_llm_judge,

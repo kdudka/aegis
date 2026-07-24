@@ -1,7 +1,6 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from pydantic_core import ValidationError
 
 from aegis_ai.agents import rh_feature_agent
@@ -14,7 +13,7 @@ from aegis_ai.features.cve.data_models import (
     RATING_GOOD,
     RATING_NEEDS_IMPROVEMENT,
 )
-from tests.utils.llm_cache import get_cached_response, cache_response
+from tests.utils.llm_cache import cache_response, get_cached_response
 
 
 @pytest.mark.asyncio
@@ -326,7 +325,7 @@ def _fake_agent_run_result(tool_names):
     msg = ModelResponse(
         parts=parts,
         usage=RequestUsage(),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     state = GraphAgentState(
         message_history=[msg],

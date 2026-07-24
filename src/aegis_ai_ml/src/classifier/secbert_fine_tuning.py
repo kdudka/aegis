@@ -1,28 +1,27 @@
 # inspired by https://github.com/sidhpurwala-huzaifa/redhat-sev-classifier
 
-import cvss
 import json
 import os
 from pathlib import Path
 
-import pandas as pd
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    TrainingArguments,
-    Trainer,
-    EarlyStoppingCallback,
-)
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.preprocessing import LabelEncoder
+import cvss
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
+import torch
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from torch.utils.data import Dataset
 from tqdm.auto import tqdm
-
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    EarlyStoppingCallback,
+    Trainer,
+    TrainingArguments,
+)
 
 CVSS3_BASIC_METRICS = ["AV", "AC", "PR", "UI", "S", "C", "I", "A"]
 

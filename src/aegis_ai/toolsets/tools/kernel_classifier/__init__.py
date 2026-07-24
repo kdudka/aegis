@@ -44,7 +44,7 @@ class KernelImpactToolResponse(BaseToolOutput):
         ...,
         description="The CVE identifier that was analysed.",
     )
-    active_features: List[str] = Field(
+    active_features: list[str] = Field(
         default_factory=list,
         description=(
             "Patch-derived binary feature flags that were detected "
@@ -53,7 +53,7 @@ class KernelImpactToolResponse(BaseToolOutput):
             "the CVSS base score should typically be at least 7.0."
         ),
     )
-    severity_probabilities: Dict[str, float] = Field(
+    severity_probabilities: dict[str, float] = Field(
         default_factory=dict,
         description=(
             "Per-class probabilities from the XGBoost model, "
@@ -86,9 +86,7 @@ async def _fetch_osidb_cvss(cve_id: str) -> list[dict]:
         return []
 
 
-async def _resolve_cvss_scores(
-    cve_id: str, static_context: Optional[dict]
-) -> list[dict]:
+async def _resolve_cvss_scores(cve_id: str, static_context: dict | None) -> list[dict]:
     """Return CVSS scores from static_context when available, else OSIDB."""
     if static_context and isinstance(static_context, dict):
         scores = static_context.get("cvss_scores")
@@ -100,8 +98,8 @@ async def _resolve_cvss_scores(
 
 async def kernel_impact_classify(
     cve_id: CVEID,
-    static_context: Optional[dict] = None,
-) -> Optional[dict]:
+    static_context: dict | None = None,
+) -> dict | None:
     """Run the full kernel classifier pipeline for *cve_id*.
 
     Returns the raw classifier dict (including ``impact``) or ``None``.

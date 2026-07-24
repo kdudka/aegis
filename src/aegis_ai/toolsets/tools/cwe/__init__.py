@@ -8,7 +8,6 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
-
 from math import log
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, no_type_check
@@ -17,13 +16,13 @@ from zipfile import ZipFile
 import aiofiles
 import httpx
 import numpy as np
-
-from pydantic_ai import Tool, RunContext
+from pydantic_ai import RunContext, Tool
 from pydantic_ai.toolsets import FunctionToolset
+
 from aegis_ai import get_settings
 from aegis_ai.data_models import CWEID, cweid_validator
 from aegis_ai.toolsets.tools import default_tool_http_headers
-from aegis_ai.toolsets.tools.cwe.data_models import CWESearchInput, CWE, CWEToolInput
+from aegis_ai.toolsets.tools.cwe.data_models import CWE, CWESearchInput, CWEToolInput
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ SIMILARITY_THRESHOLD = 0.12
 
 # Heuristic boosts for common CWE patterns to improve ranking
 # fmt: off
-KEYWORD_BOOSTS: List[Tuple[re.Pattern[str], str, float]] = [
+KEYWORD_BOOSTS: list[tuple[re.Pattern[str], str, float]] = [
     (re.compile(r"\buse[- ]?after[- ]?free\b"), "CWE-416", 0.25),
     (re.compile(r"\bnull (pointer|deref\w*)\b"), "CWE-476", 0.2),
     (re.compile(r"\bheap buffer overflow\b|\bout[- ]of[- ]bounds write\b|\boob write\b"), "CWE-787", 0.25),
@@ -81,17 +80,17 @@ class CWEManager:
 
     @no_type_check
     def __init__(self):
-        self._definitions: Optional[Dict[str, Dict]] = None
+        self._definitions: dict[str, dict] | None = None
         # Lightweight TF-IDF artifacts
-        self._tfidf_matrix: Optional[np.ndarray] = None  # shape: (num_docs, vocab_size)
-        self._idf_vector: Optional[np.ndarray] = None  # shape: (vocab_size,)
-        self._vocab: Optional[Dict[str, int]] = None  # token -> column index
-        self._index_to_cweid: Optional[List[str]] = None
+        self._tfidf_matrix: np.ndarray | None = None  # shape: (num_docs, vocab_size)
+        self._idf_vector: np.ndarray | None = None  # shape: (vocab_size,)
+        self._vocab: dict[str, int] | None = None  # token -> column index
+        self._index_to_cweid: list[str] | None = None
         self._lock = asyncio.Lock()
         self._is_initialized = False
         self._debug = False
 
-    async def _fetch_mapping_usage(self, client: httpx.AsyncClient) -> Dict[str, str]:
+    async def _fetch_mapping_usage(self, client: httpx.AsyncClient) -> dict[str, str]:
         """Fetch CWE XML from MITRE and extract per-CWE mapping usage."""
         try:
             logger.info(f"Fetching CWE mapping usage from '{CWE_XML_URL}'...")
@@ -106,7 +105,7 @@ class CWEManager:
             ns_match = re.match(r"\{(.+?)\}", root.tag)
             ns = f"{{{ns_match.group(1)}}}" if ns_match else ""
 
-            usage_map: Dict[str, str] = {}
+            usage_map: dict[str, str] = {}
             for weakness in root.iter(f"{ns}Weakness"):
                 cwe_id = f"CWE-{weakness.get('ID', '')}"
                 usage_el = weakness.find(f"{ns}Mapping_Notes/{ns}Usage")
@@ -119,7 +118,7 @@ class CWEManager:
             logger.warning(f"Failed to fetch CWE mapping usage: {e}")
             return {}
 
-    async def _fetch_and_parse_cwe_data(self) -> Dict[str, Dict]:
+    async def _fetch_and_parse_cwe_data(self) -> dict[str, dict]:
         """Fetch CWE CSVs from MITRE, parse em, and return dict."""
         defs = {}
         async with httpx.AsyncClient(
@@ -171,20 +170,20 @@ class CWEManager:
 
     @no_type_check
     async def _build_tfidf_index(
-        self, cwe_data: Dict[str, Dict]
-    ) -> Tuple[np.ndarray, np.ndarray, Dict[str, int], List[str]]:
+        self, cwe_data: dict[str, dict]
+    ) -> tuple[np.ndarray, np.ndarray, dict[str, int], list[str]]:
         """Build/cache a TF-IDF matrix from CWE data (pure NumPy)."""
         logger.info("Building and caching new TF-IDF index...")
 
         def normalize(text: str) -> str:
             return text.lower()
 
-        def tokenize(text: str) -> List[str]:
+        def tokenize(text: str) -> list[str]:
             return re.findall(r"[a-z0-9]+", text)
 
         # Compose corpus texts and ids (skip disallowed CWEs)
-        corpus_texts: List[str] = []
-        cwe_ids: List[str] = []
+        corpus_texts: list[str] = []
+        cwe_ids: list[str] = []
         for cwe_id, details in cwe_data.items():
             if details.get("disallowed"):
                 continue
@@ -193,8 +192,8 @@ class CWEManager:
             cwe_ids.append(cwe_id)
 
         # Build vocab
-        vocab: Dict[str, int] = {}
-        docs_tokens: List[List[str]] = []
+        vocab: dict[str, int] = {}
+        docs_tokens: list[list[str]] = []
         for text in corpus_texts:
             tokens = tokenize(text)
             docs_tokens.append(tokens)
@@ -213,7 +212,7 @@ class CWEManager:
         for di, tokens in enumerate(docs_tokens):
             if not tokens:
                 continue
-            counts: Dict[int, int] = {}
+            counts: dict[int, int] = {}
             for tok in tokens:
                 ti = vocab[tok]
                 counts[ti] = counts.get(ti, 0) + 1
@@ -323,7 +322,7 @@ class CWEManager:
         )
 
     @no_type_check
-    async def search_cwes(self, query: str, top_k: int = 12) -> List[CWE]:
+    async def search_cwes(self, query: str, top_k: int = 12) -> list[CWE]:
         """Perform lightweight TF-IDF cosine-similarity search for CWEs."""
         if (
             self._tfidf_matrix is None
@@ -336,7 +335,7 @@ class CWEManager:
             return []
 
         # Tokenize and build query TF-IDF vector
-        def tokenize(text: str) -> List[str]:
+        def tokenize(text: str) -> list[str]:
             return re.findall(r"[a-z0-9]+", text.lower())
 
         tokens = tokenize(query)
@@ -344,7 +343,7 @@ class CWEManager:
             return []
 
         vocab = self._vocab
-        counts: Dict[int, int] = {}
+        counts: dict[int, int] = {}
         for tok in tokens:
             if tok in vocab:
                 ti = vocab[tok]
@@ -364,7 +363,7 @@ class CWEManager:
         sims = self._tfidf_matrix @ q_vec  # cosine similarity
 
         # Heuristic boosts for common CWE patterns to improve ranking
-        boosts: Dict[int, float] = {}
+        boosts: dict[int, float] = {}
         for pattern, cwe_id, boost in KEYWORD_BOOSTS:
             if pattern.search(query):
                 try:
@@ -382,7 +381,7 @@ class CWEManager:
         top_idx = np.argpartition(-sims, kth=k - 1)[:k]
         top_idx = top_idx[np.argsort(-sims[top_idx])]
 
-        results: List[CWE] = []
+        results: list[CWE] = []
         for idx in top_idx:
             score = float(sims[idx])
             if score < SIMILARITY_THRESHOLD:
@@ -394,7 +393,7 @@ class CWEManager:
                 results.append(CWE(cwe_id=cwe_id, score=score, **cwe_details))
         return results
 
-    def get_allowed_cwe_ids(self) -> List[CWEID]:
+    def get_allowed_cwe_ids(self) -> list[CWEID]:
         """Return list of all allowed CWE IDs from in-memory cache."""
 
         cwe_tool_allowed_cwe_ids = os.getenv("AEGIS_CWE_TOOL_ALLOWED_CWE_IDS", "")
@@ -411,12 +410,12 @@ class CWEManager:
 
 
 # these are aiofiles helper funcs
-async def read_json_async(path: Path) -> Union[Dict, List]:
+async def read_json_async(path: Path) -> dict | list:
     async with aiofiles.open(path, "r", encoding="utf-8") as f:
         return json.loads(await f.read())
 
 
-async def write_json_async(path: Path, data: Union[Dict, List]):
+async def write_json_async(path: Path, data: dict | list):
     async with aiofiles.open(path, "w", encoding="utf-8") as f:
         await f.write(json.dumps(data, indent=2))
 
@@ -426,7 +425,7 @@ cwe_manager = CWEManager()
 
 
 @Tool
-async def search_cwes(ctx: RunContext, inputs: CWESearchInput) -> List[CWE]:
+async def search_cwes(ctx: RunContext, inputs: CWESearchInput) -> list[CWE]:
     """Perform semantic search to find the most relevant CWEs based on a query."""
     await cwe_manager.initialize()  # Ensures data is loaded, but only runs once
 
@@ -442,7 +441,7 @@ async def search_cwes(ctx: RunContext, inputs: CWESearchInput) -> List[CWE]:
 
 
 @Tool
-async def retrieve_cwes(ctx: RunContext, inputs: CWEToolInput) -> List[CWE]:
+async def retrieve_cwes(ctx: RunContext, inputs: CWEToolInput) -> list[CWE]:
     """Look up CWE definitions by IDs."""
     await cwe_manager.initialize()
     logger.debug(f"Retrieving definitions for CWEs: {inputs.cwe_ids}")
@@ -454,7 +453,7 @@ async def retrieve_cwes(ctx: RunContext, inputs: CWEToolInput) -> List[CWE]:
 
 
 @Tool
-async def retrieve_allowed_cwe_ids(ctx: RunContext) -> List[CWEID]:
+async def retrieve_allowed_cwe_ids(ctx: RunContext) -> list[CWEID]:
     """Retrieve list of allowed CWE IDs."""
     await cwe_manager.initialize()
     logger.debug("Retrieving all allowed CWE-IDs.")

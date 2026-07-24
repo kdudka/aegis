@@ -1,19 +1,18 @@
-import pytest
 from typing import get_args
 
+import pytest
 from pydantic_evals import Case
 
 from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.cve import (
-    SuggestStatementText,
     SuggestStatementModel,
+    SuggestStatementText,
 )
-
 from evals.features.common import (
+    FIELD_RUBRICS,
     common_feature_evals,
     create_llm_judge,
-    FIELD_RUBRICS,
     run_evaluation,
 )
 

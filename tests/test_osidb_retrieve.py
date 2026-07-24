@@ -19,7 +19,6 @@ from aegis_ai_ml.src.osidb_retrieve import (
     normalize_flaws,
 )
 
-
 # ---------------------------------------------------------------------------
 # normalize_flaws — per-CVE skip reasons
 # ---------------------------------------------------------------------------

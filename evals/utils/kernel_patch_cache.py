@@ -35,7 +35,7 @@ html_cache_misses: set[str] = set()
 
 
 async def cached_fetch_patches(
-    self,  # noqa: ARG001 — matches KernelImpactClassifier method signature
+    self,
     commit_hashes: list[str],
 ) -> list[tuple[str, str]]:
     """Cache-only replacement for ``KernelImpactClassifier._fetch_patches``.
@@ -62,7 +62,7 @@ async def cached_fetch_patches(
 
 
 async def cached_fetch_commit_html(
-    self,  # noqa: ARG001 — matches KernelImpactClassifier method signature
+    self,
     commit_hashes: list[str],
 ) -> list[tuple[str, str]]:
     """Cache-only replacement for ``KernelImpactClassifier._fetch_commit_html``.

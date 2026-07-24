@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import Field
 
@@ -11,7 +11,7 @@ MappingUsage = Literal["Allowed", "Allowed-with-Review", "Discouraged", "Prohibi
 class CWEToolInput(BaseToolInput):
     """CWE tool input"""
 
-    cwe_ids: List[CWEID] = Field(
+    cwe_ids: list[CWEID] = Field(
         ...,
         description="Array of unique CWE identifiers.",
     )
@@ -66,12 +66,12 @@ class CWE(BaseToolOutput):
         description="True if the CWE is not available in the CWE-699 view.",
     )
 
-    mapping_usage: Optional[MappingUsage] = Field(
+    mapping_usage: MappingUsage | None = Field(
         default=None,
         description="MITRE mapping usage guidance (Allowed, Allowed-with-Review, Discouraged, Prohibited).",
     )
 
-    score: Optional[float] = Field(
+    score: float | None = Field(
         0,
         ge=0.0,
         le=1.0,

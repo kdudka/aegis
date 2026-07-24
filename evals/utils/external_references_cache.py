@@ -8,6 +8,8 @@ from typing import Any
 from aegis_ai.toolsets.tools.external_references import (
     ExternalReferenceResult,
     cache_key_for_url,
+)
+from aegis_ai.toolsets.tools.external_references import (
     fetch_reference as live_fetch_reference,
 )
 

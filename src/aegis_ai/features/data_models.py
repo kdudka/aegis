@@ -1,6 +1,7 @@
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, List, Literal, Optional
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -18,12 +19,12 @@ class feature_deps:
     current_dt: str = field(
         default_factory=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
-    exclude_osidb_fields: List[str] = field(
+    exclude_osidb_fields: list[str] = field(
         default_factory=list,
     )
     # When set, the OSIDB flaw_tool uses this instead of calling OSIDB API.
     # Used when static_context already contains sufficient CVE data (e.g. from web API).
-    static_context: Optional[Any] = field(default=None)
+    static_context: Any | None = field(default=None)
     # Set by SuggestImpact.exec (pre-run) or flaw_tool (at runtime) when OSIDB
     # data indicates a kernel component.  Read by check_kernel_output to
     # enforce kernel_impact_tool usage, and by the tool itself to gate
@@ -38,7 +39,7 @@ class feature_deps:
     # exec() before the LLM run; kernel_impact_tool returns it immediately
     # via its fast-path cache (mirrors the flaw_tool static_context pattern).
     # Also read by post-processing (reconciliation, guardrails).
-    classifier_result: Optional[dict] = field(default=None)
+    classifier_result: dict | None = field(default=None)
 
 
 class FeatureQueryInput(BaseModel):
@@ -64,7 +65,7 @@ class AegisFeatureModel(BaseModel):
         description="Quantification of reliability of the provided suggestion, ranging from 0.0 (guessing) to 1.0 (certainty).  Be conservative in this judgment.",
     )
 
-    tools_used: List[str] = Field(
+    tools_used: list[str] = Field(
         default_factory=list,
         description="Tools that were called during this run (populated automatically, not by the LLM).",
     )

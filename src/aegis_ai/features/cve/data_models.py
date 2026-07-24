@@ -1,27 +1,25 @@
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
-from pydantic import Field, BaseModel, PrivateAttr, model_validator
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
-from aegis_ai.data_models import CVEID, CVSS3Vector, CWEID
+from aegis_ai.data_models import CVEID, CWEID, CVSS3Vector
 from aegis_ai.features.data_models import AegisFeatureModel
 
 
 class CVEFeatureInput(BaseModel):
     cve_id: CVEID = Field(..., description="CVE ID input")
-    title: Optional[str] = Field(None, description="CVE title")
-    description: Optional[str] = Field(None, description="CVE description")
-    cwe_id: Optional[str] = Field(None, description="CVE CWE ID")
-    impact: Optional[str] = Field(None, description="CVE impact")
-    statement: Optional[str] = Field(None, description="CVE statement")
-    mitigation: Optional[str] = Field(None, description="CVE mitigation")
-    comment_zero: Optional[str] = Field(None, description="CVE comment_zero")
-    comments: Optional[Union[List, str]] = Field(
-        None, description="All public comments"
-    )
-    components: Optional[List] = Field(None, description="List of components")
-    references: Optional[List] = Field(None, description="List of references")
-    affects: Optional[List] = Field(None, description="List of affects")
-    cvss_scores: Optional[List] = Field(None, description="List of CVSS scores")
+    title: str | None = Field(None, description="CVE title")
+    description: str | None = Field(None, description="CVE description")
+    cwe_id: str | None = Field(None, description="CVE CWE ID")
+    impact: str | None = Field(None, description="CVE impact")
+    statement: str | None = Field(None, description="CVE statement")
+    mitigation: str | None = Field(None, description="CVE mitigation")
+    comment_zero: str | None = Field(None, description="CVE comment_zero")
+    comments: list | str | None = Field(None, description="All public comments")
+    components: list | None = Field(None, description="List of components")
+    references: list | None = Field(None, description="List of references")
+    affects: list | None = Field(None, description="List of affects")
+    cvss_scores: list | None = Field(None, description="List of CVSS scores")
 
     def __repr__(self) -> str:
         fields = {k: v for k, v in self.__dict__.items() if v is not None}
@@ -52,12 +50,12 @@ class SuggestAffectedComponentsModel(AegisFeatureModel):
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
     )
 
-    components: List[str] = Field(
+    components: list[str] = Field(
         ...,
         description="Suggested affected component names.",
     )
 
-    ecosystems: List[str] = Field(
+    ecosystems: list[str] = Field(
         default_factory=list,
         description="Package ecosystems impacted by this vulnerability. "
         "Allowed values: cargo, golang, npm, pypi, maven, gem, upstream, unknown.",
@@ -98,7 +96,7 @@ class SuggestImpactModel(AegisFeatureModel):
         description="Explain rationale behind suggested CVSS 3.1 score and impact rating.",
     )
 
-    impact: Optional[Literal["LOW", "MODERATE", "IMPORTANT", "CRITICAL"]] = Field(
+    impact: Literal["LOW", "MODERATE", "IMPORTANT", "CRITICAL"] | None = Field(
         description="Suggested Red Hat CVE impact",
     )
 
@@ -107,11 +105,11 @@ class SuggestImpactModel(AegisFeatureModel):
         description="Suggested Red Hat CVSS3.1 score",
     )
 
-    cvss3_vector: Optional[CVSS3Vector] = Field(
+    cvss3_vector: CVSS3Vector | None = Field(
         description="Suggested Red Hat CVSS3.1 vector",
     )
 
-    deescalation_rationale: Optional[str] = Field(
+    deescalation_rationale: str | None = Field(
         default=None,
         exclude=True,
         description=(
@@ -122,7 +120,7 @@ class SuggestImpactModel(AegisFeatureModel):
         ),
     )
 
-    classifier_disagreement_rationale: Optional[str] = Field(
+    classifier_disagreement_rationale: str | None = Field(
         default=None,
         exclude=True,
         description=(
@@ -134,13 +132,13 @@ class SuggestImpactModel(AegisFeatureModel):
         ),
     )
 
-    _flags: List[str] = PrivateAttr(default_factory=list)
-    _classifier_diagnostics: Optional[Dict[str, Any]] = PrivateAttr(default=None)
-    _reconciliation_trace: Optional[str] = PrivateAttr(default=None)
+    _flags: list[str] = PrivateAttr(default_factory=list)
+    _classifier_diagnostics: dict[str, Any] | None = PrivateAttr(default=None)
+    _reconciliation_trace: str | None = PrivateAttr(default=None)
     _escalation_floor_applied: bool = PrivateAttr(default=False)
-    _original_llm_impact: Optional[str] = PrivateAttr(default=None)
-    _original_llm_score: Optional[str] = PrivateAttr(default=None)
-    _original_llm_vector: Optional[str] = PrivateAttr(default=None)
+    _original_llm_impact: str | None = PrivateAttr(default=None)
+    _original_llm_score: str | None = PrivateAttr(default=None)
+    _original_llm_vector: str | None = PrivateAttr(default=None)
     _explanation_revised: bool = PrivateAttr(default=False)
 
     def printable_outcome(self) -> str:
@@ -175,7 +173,7 @@ class SuggestCWEModel(AegisFeatureModel):
         """,
     )
 
-    cwe: List[CWEID] = Field(
+    cwe: list[CWEID] = Field(
         ...,
         description="List of cwe-ids",
     )
@@ -218,7 +216,7 @@ class SuggestDescriptionModel(AegisFeatureModel):
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
     )
 
-    components: List = Field(
+    components: list = Field(
         ...,
         description="list of affected components",
     )
@@ -266,11 +264,11 @@ class SuggestStatementModel(AegisFeatureModel):
         """,
     )
 
-    suggested_statement: Optional[str] = Field(
+    suggested_statement: str | None = Field(
         description="suggested Red Hat CVE statement explaining impact on Red Hat supported products.",
     )
 
-    suggested_mitigation: Optional[str] = Field(
+    suggested_mitigation: str | None = Field(
         description="suggested Red Hat CVE mitigation explaining how to mitigate impact on Red Hat supported products.",
     )
 
@@ -428,47 +426,47 @@ class QualityReviewModel(AegisFeatureModel):
         description="Quality rating derived from overall_score (auto-computed).",
     )
 
-    scores: List[Dict[str, Any]] = Field(
+    scores: list[dict[str, Any]] = Field(
         ...,
         description="Flat list of all criterion scores across all 6 rubric categories. "
         "Each entry is an object with: category (string), criterion_id (string), "
         "score (integer 0-2), and justification (string).",
     )
 
-    customer_can_decide: List[str] = Field(
+    customer_can_decide: list[str] = Field(
         ...,
         description="What a customer CAN decide from the current content.",
     )
-    remains_unclear: List[str] = Field(
+    remains_unclear: list[str] = Field(
         ...,
         description="What REMAINS UNCLEAR from the current content.",
     )
-    manual_context_needed: List[str] = Field(
+    manual_context_needed: list[str] = Field(
         ...,
         description="What additional context an analyst would need to add MANUALLY.",
     )
 
-    strengths: List[str] = Field(
+    strengths: list[str] = Field(
         ...,
         description="Notable strengths of the flaw content.",
     )
 
-    critical_gaps: List[str] = Field(
+    critical_gaps: list[str] = Field(
         ...,
         description="Critical gaps that must be addressed.",
     )
 
-    recommendations: List[str] = Field(
+    recommendations: list[str] = Field(
         ...,
         description="Actionable recommendations to improve the content.",
     )
 
-    suggested_statement: Optional[str] = Field(
+    suggested_statement: str | None = Field(
         default=None,
         description="Suggested rewrite of the statement when current content scores poorly.",
     )
 
-    suggested_mitigation: Optional[str] = Field(
+    suggested_mitigation: str | None = Field(
         default=None,
         description="Suggested rewrite of the mitigation when current content scores poorly.",
     )

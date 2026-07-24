@@ -3,7 +3,6 @@ from typing import get_args
 
 import cvss
 import pytest
-
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
 
@@ -11,7 +10,6 @@ from aegis_ai.agents import rh_feature_agent
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.cve import SuggestImpact, SuggestImpactModel
 from aegis_ai.kernel_classifier import is_kernel_component
-
 from evals.features.common import (
     common_feature_evals,
     create_llm_judge,
@@ -20,7 +18,6 @@ from evals.features.common import (
     run_evaluation,
 )
 from evals.utils.osidb_cache import read_cache_json
-
 
 # dict to convert "IMPORTANT" to 8.0 etc
 # the following line is needed for ruff to accept the aligned comments

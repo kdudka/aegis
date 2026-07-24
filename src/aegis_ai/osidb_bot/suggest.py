@@ -1,12 +1,12 @@
-from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
-from aegis_ai.data_models import CVEID, cveid_validator
-from aegis_ai.features import Feature, cve
-from aegis_ai.features.data_models import AegisAnswer, AegisFeatureModel
+from datetime import datetime
+from typing import Any
 
 from pydantic_ai import Agent
 
-from datetime import datetime
-from typing import Any, Optional
+from aegis_ai.data_models import CVEID, cveid_validator
+from aegis_ai.features import Feature, cve
+from aegis_ai.features.data_models import AegisAnswer, AegisFeatureModel
+from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 
 _KERNEL_FLAGS_KEY = "kernel_flags"
 
@@ -25,11 +25,11 @@ METRICS_THR = {
 
 def check_metrics(
     feat_name: str, cve_id: str | CVEID, output: AegisFeatureModel
-) -> Optional[str]:
+) -> str | None:
     """Return None if metrics are acceptable, or the name of the failing metric.
 
     `cve_id` may be a `CVEID` or a raw string (including an empty string if the ID is missing)."""
-    skip_reason: Optional[str] = None
+    skip_reason: str | None = None
     for field, thr_map in METRICS_THR.items():
         value = getattr(output, field)
         if value <= thr_map["info_thr"]:
@@ -60,7 +60,7 @@ async def exec_feature(feature: Feature, flaw_data: FlawData) -> Any:
 
     except Exception as e:
         msg = f"exec_feature({feat_name}) terminated with Exception"
-        logger.debug(f"{msg}: {str(e)}")
+        logger.debug(f"{msg}: {e!s}")
         raise RuntimeError(f"{msg}: {e.__class__.__name__}")
 
 
@@ -88,8 +88,8 @@ def update_field(
     timestamp: datetime,
     dst: str,
     output: AegisAnswer,
-    src: Optional[str] = None,
-    value: Optional[str] = None,
+    src: str | None = None,
+    value: str | None = None,
     only_if_missing: bool = False,
 ) -> set[str]:
     assert (not src) or (not value)

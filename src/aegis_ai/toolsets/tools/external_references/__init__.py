@@ -221,10 +221,8 @@ class ExternalReferenceInput(BaseToolInput):
 
 class ExternalReferenceResult(BaseToolOutput):
     url: str = Field(..., description="The original reference URL.")
-    content_type: Optional[str] = Field(
-        None, description="Content type of the response."
-    )
-    extracted_text: Optional[str] = Field(
+    content_type: str | None = Field(None, description="Content type of the response.")
+    extracted_text: str | None = Field(
         None, description="Extracted text content from the reference."
     )
 
@@ -264,7 +262,7 @@ def validate_url(url: str) -> bool:
     return _url_matches_prefix(url)
 
 
-def _normalize_cve_org_url(url: str) -> Optional[str]:
+def _normalize_cve_org_url(url: str) -> str | None:
     """Rewrite cve.org record page URL to the CVE Services JSON API endpoint."""
     parsed = urlparse(url)
     if parsed.hostname != "www.cve.org":
@@ -323,7 +321,7 @@ class _HTMLTextExtractor(HTMLParser):
         self._parts: list[str] = []
         self._skip_depth = 0
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, Optional[str]]]) -> None:
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
         elif tag in ("br", "p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"):
@@ -420,29 +418,31 @@ async def fetch_reference(url: str) -> ExternalReferenceResult:
     fetch_url = _normalize_cve_org_url(url) or url
 
     try:
-        async with httpx.AsyncClient(
-            headers=default_tool_http_headers,
-            timeout=httpx.Timeout(FETCH_TIMEOUT_SECONDS),
-            follow_redirects=True,
-        ) as client:
-            async with client.stream("GET", fetch_url) as resp:
-                if not _url_matches_prefix(str(resp.url)):
-                    return ExternalReferenceResult(
-                        url=url,
-                        status="blocked",
-                        error_message=f"Redirect to non-allowed URL: {resp.url}",
-                    )
+        async with (
+            httpx.AsyncClient(
+                headers=default_tool_http_headers,
+                timeout=httpx.Timeout(FETCH_TIMEOUT_SECONDS),
+                follow_redirects=True,
+            ) as client,
+            client.stream("GET", fetch_url) as resp,
+        ):
+            if not _url_matches_prefix(str(resp.url)):
+                return ExternalReferenceResult(
+                    url=url,
+                    status="blocked",
+                    error_message=f"Redirect to non-allowed URL: {resp.url}",
+                )
 
-                resp.raise_for_status()
+            resp.raise_for_status()
 
-                chunks: list[bytes] = []
-                total = 0
-                async for chunk in resp.aiter_bytes():
-                    chunks.append(chunk)
-                    total += len(chunk)
-                    if total >= MAX_READ_BYTES:
-                        break
-                raw = b"".join(chunks)
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in resp.aiter_bytes():
+                chunks.append(chunk)
+                total += len(chunk)
+                if total >= MAX_READ_BYTES:
+                    break
+            raw = b"".join(chunks)
 
     except httpx.TimeoutException:
         return ExternalReferenceResult(
@@ -525,7 +525,7 @@ async def external_references_tool(
         async with asyncio.timeout(TOTAL_FETCH_TIMEOUT_SECONDS):
             for coro in asyncio.as_completed(tasks):
                 results.append(await coro)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         for t in tasks:
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)

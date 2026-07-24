@@ -1,15 +1,13 @@
 import fcntl
 import json
 import os
-
-from aegis_ai.osidb_bot.util import logger
-
 from datetime import datetime
-from typing import Any, Never, Optional, Self
+from typing import Any, Never, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from aegis_ai.data_models import CVEID
+from aegis_ai.osidb_bot.util import logger
 
 
 class BotPosition(BaseModel):
@@ -19,10 +17,10 @@ class BotPosition(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # the last processed CVE
-    last_cve: Optional[CVEID] = None
+    last_cve: CVEID | None = None
 
     # creation timestamp of the last processed CVE
-    created_dt: Optional[datetime] = None
+    created_dt: datetime | None = None
 
 
 class BotState(BotPosition):
@@ -36,17 +34,17 @@ class BotState(BotPosition):
 
 class StateFileHandler:
     # state file name (path)
-    state_file: Optional[str]
+    state_file: str | None
 
     # state file descriptor (OS level)
     state_fd: int
 
-    def __init__(self, state_file: Optional[str]):
+    def __init__(self, state_file: str | None):
         self.state_file = state_file
         self.state_fd = -1
 
     def _fail(self, e: Exception, msg: str) -> Never:
-        logger.debug(f"{msg}: {str(e)}")
+        logger.debug(f"{msg}: {e!s}")
         raise RuntimeError(f"{msg}: {self.state_file} ({e.__class__.__name__})")
 
     def _sf_prefix(self) -> str:
@@ -89,7 +87,7 @@ class StateFileHandler:
         os.close(self.state_fd)
         self.state_fd = -1
 
-    def read_state(self) -> Optional[BotState]:
+    def read_state(self) -> BotState | None:
         """Read JSON-encoded BotState from state_fd. Returns None if file is empty."""
         if not self.state_file:
             # do nothing

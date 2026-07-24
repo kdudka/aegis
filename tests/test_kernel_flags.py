@@ -7,15 +7,15 @@ Covers:
 - FlawCollaborator label creation in FlawUpdater.do()
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from aegis_ai.features.cve import SuggestImpact, _FLAG_TO_LABEL
+import pytest
+
+from aegis_ai.features.cve import _FLAG_TO_LABEL, SuggestImpact
 from aegis_ai.features.cve.data_models import SuggestImpactModel
 from aegis_ai.osidb_bot.bot import FlawUpdater
-
 
 CVE_ID = "CVE-2025-99999"
 
@@ -115,7 +115,7 @@ def _mock_session(flaw_data: dict) -> MagicMock:
     session = MagicMock()
     session.flaws.retrieve.return_value = MagicMock(to_dict=lambda: flaw_data)
     session.status.return_value = MagicMock(
-        dt=datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dt=datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
     )
     session.flaws.update = MagicMock()
     session.flaws.cvss_scores = MagicMock()
@@ -304,7 +304,7 @@ class TestSuggestImpactAegisMetaKernelFlags:
         flaw_data = _minimal_flaw_data()
         from aegis_ai.osidb_bot.suggest import suggest_impact
 
-        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         agent = MagicMock()
         changed = await suggest_impact(agent, flaw_data, ts)
 
@@ -339,7 +339,7 @@ class TestSuggestImpactAegisMetaKernelFlags:
         flaw_data = _minimal_flaw_data()
         from aegis_ai.osidb_bot.suggest import suggest_impact
 
-        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
         changed = await suggest_impact(MagicMock(), flaw_data, ts)
 
         assert "kernel_flags" not in changed

@@ -7,9 +7,9 @@ Vulnerability (OSV) database API.
 deps: pip install requests
 """
 
-import requests
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
+import requests
 from pydantic import Field
 from pydantic_ai import RunContext, Tool
 from requests import RequestException
@@ -17,9 +17,9 @@ from requests import RequestException
 from aegis_ai import logger
 from aegis_ai.data_models import CVEID
 from aegis_ai.toolsets.tools import (
-    default_tool_http_headers,
-    BaseToolOutput,
     BaseToolInput,
+    BaseToolOutput,
+    default_tool_http_headers,
 )
 
 # timeout in seconds for GET requests
@@ -28,7 +28,7 @@ REQUEST_TIMEOUT_GET = 5
 # timeout in seconds for POST requests
 REQUEST_TIMEOUT_POST = 15
 
-JsonBlob = Dict[str, Any]
+JsonBlob = dict[str, Any]
 
 
 class OSVToolInput(BaseToolInput):
@@ -125,7 +125,7 @@ class OSVClient:
         """
         return self._post("query", data=payload)
 
-    def query_batch(self, queries: List[JsonBlob]) -> JsonBlob:
+    def query_batch(self, queries: list[JsonBlob]) -> JsonBlob:
         """
         Submits multiple queries to the /v1/querybatch endpoint.
         This is the most efficient way to query many packages at once.

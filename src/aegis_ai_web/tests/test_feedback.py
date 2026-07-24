@@ -1,10 +1,11 @@
 import csv
+
 import pytest
 from fastapi.testclient import TestClient
 
-from aegis_ai_web.src.main import app
 from aegis_ai_web.src.data_models import FEEDBACK_SCHEMA
-from tests.utils.llm_cache import get_cached_response, cache_response
+from aegis_ai_web.src.main import app
+from tests.utils.llm_cache import cache_response, get_cached_response
 
 client = TestClient(app)
 
@@ -215,7 +216,7 @@ def test_save_feedback_exception_handling(feedback_log_setup, monkeypatch):
 
     # Mock feedback_logger.write to raise an exception
     def mock_write_raises(*args, **kwargs):
-        raise IOError("Simulated file write error")
+        raise OSError("Simulated file write error")
 
     from aegis_ai_web.src import main
 

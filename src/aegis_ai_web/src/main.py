@@ -10,50 +10,47 @@ import logging
 import os
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional, Type, Annotated, cast, Any
+from typing import Annotated, Any, cast
 
 import yaml
-from fastapi import FastAPI, Request, HTTPException, Form, Query
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, Response
-
-from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from aegis_ai import config_logging, get_settings
 from aegis_ai.agents import (
     public_feature_agent,
     rh_feature_agent,
 )
-
 from aegis_ai.data_models import CVEID, cveid_validator
+from aegis_ai.features import component, cve
+from aegis_ai.features.data_models import AegisAnswer
 from aegis_ai.toolsets.tools.osidb.osidb_client import (
     OSIDBAuthError,
     OSIDBFlawNotFoundError,
     OSIDBUnauthorizedError,
 )
-from aegis_ai.features import cve, component
-from aegis_ai.features.data_models import AegisAnswer
 
 from . import (
     AEGIS_REST_API_VERSION,
-    web_feature_agent,
     ENABLE_CONSOLE,
+    web_feature_agent,
 )
 from .data_models import (
     CVEMultiAnalysisRequest,
     CVEMultiAnalysisResponse,
     CVESingleAnalysisRequest,
-    Feedback,
     FeatureError,
     FeatureKPI,
+    Feedback,
     ProgrammaticFeedback,
 )
-from .endpoints.kpi import get_cve_kpi, SortOrder
+from .endpoints.kpi import SortOrder, get_cve_kpi
 from .feedback_logger import feedback_logger, programmatic_feedback_logger
 from .semantic_scoring import (
     calculate_semantic_proximity_score,
@@ -190,6 +187,7 @@ if kerberos_spn:
     from starlette.responses import Response
 
     from aegis_ai.request_context import set_request_scope
+
     from .gssapi_delegation import GSSAPIDelegationMiddleware
 
     class CustomGSSAPIDelegationMiddleware(GSSAPIDelegationMiddleware):
@@ -206,7 +204,7 @@ if kerberos_spn:
         """Set current request scope in contextvar for OSIDB credential pass-through; clear after request."""
 
         async def dispatch(self, request: Request, call_next):
-            set_request_scope(cast(Optional[Dict[str, Any]], request.scope))
+            set_request_scope(cast(dict[str, Any] | None, request.scope))
             try:
                 return await call_next(request)
             finally:
@@ -326,7 +324,7 @@ if ENABLE_CONSOLE:
             )
 
 
-cve_feature_registry: Dict[str, Type] = {
+cve_feature_registry: dict[str, type] = {
     "suggest-impact": cve.SuggestImpact,
     "suggest-cwe": cve.SuggestCWE,
     "suggest-description": cve.SuggestDescriptionText,
@@ -346,7 +344,7 @@ DEFAULT_CVE_FEATURES = [
 
 CVEFeatureName = Enum(
     "CVEFeatureName",
-    {name: name for name in cve_feature_registry.keys()},
+    {name: name for name in cve_feature_registry},
     type=str,
 )
 
@@ -482,8 +480,8 @@ async def cve_multi_analysis(
     if request_body.model_extra:
         validated_input.update(request_body.model_extra)
 
-    results: Dict[str, Any] = {}
-    errors: Dict[str, FeatureError] = {}
+    results: dict[str, Any] = {}
+    errors: dict[str, FeatureError] = {}
 
     sac_name = "suggest-affected-components"
     sac_requested = sac_name in requested_features
@@ -580,12 +578,12 @@ async def cve_analysis_with_body(
         )
 
 
-component_feature_registry: Dict[str, Type] = {
+component_feature_registry: dict[str, type] = {
     "component-intelligence": component.ComponentIntelligence,
 }
 ComponentFeatureName = Enum(
     "ComponentFeatureName",
-    {name: name for name in component_feature_registry.keys()},
+    {name: name for name in component_feature_registry},
     type=str,
 )
 
@@ -633,7 +631,7 @@ async def component_analysis(
     f"/api/{AEGIS_REST_API_VERSION}/analysis/kpi/cve",
     summary="Get CVE Analysis KPI Metrics",
     description="Retrieve Key Performance Indicator (KPI) metrics for CVE analysis feedback, filtered by feature name. Returns a dictionary mapping feature names to their KPI responses (acceptance score percentage and all matching log entries sorted by datetime). Use feature='all' to get KPIs for all features. For single feature queries, the dict contains one key-value pair.",
-    response_model=Dict[str, FeatureKPI],
+    response_model=dict[str, FeatureKPI],
     responses={
         200: {
             "description": "Successful response with KPI metrics",
@@ -735,7 +733,7 @@ async def cve_kpi(
         description="Sort order for datetime field. Must be 'asc' (ascending, oldest first) or 'desc' (descending, newest first). Defaults to 'asc'.",
         examples=["asc", "desc"],
     ),
-) -> Dict[str, FeatureKPI]:
+) -> dict[str, FeatureKPI]:
     """
     Get KPI metrics for CVE analysis feedback filtered by feature.
 
@@ -916,7 +914,7 @@ async def process_semantic_scoring(
         # Entry will remain with empty score and can be retried later
         logging.warning(
             f"Error during semantic scoring for feature={feature}, "
-            f"cve_id={cve_id}: {e.__class__.__name__}: {str(e)}"
+            f"cve_id={cve_id}: {e.__class__.__name__}: {e!s}"
         )
         return None
 

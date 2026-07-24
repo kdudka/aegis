@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-import hashlib
 import re
 import subprocess
 from collections import Counter
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from urllib.parse import urlparse
 
 from aegis_ai.kernel_classifier import is_kernel_component
@@ -16,9 +17,9 @@ from aegis_ai.kernel_classifier import is_kernel_component
 __all__ = [
     "CVSS_ISSUER_PRIORITY",
     "LEGACY_PATCH_ID_FIELD",
-    "LinuxVulnsResolver",
     "PATCH_IDS_FIELD",
     "SUPPORTED_SEVERITIES",
+    "LinuxVulnsResolver",
     "build_generation_report",
     "extract_cvss_fields",
     "extract_patch_ids",
@@ -313,8 +314,7 @@ def _score_split(
             continue
         actual = by_sev_test.get(sev, 0) / total
         dev = abs(actual - test_ratio)
-        if dev > max_class_dev:
-            max_class_dev = dev
+        max_class_dev = max(max_class_dev, dev)
 
     train_cvss = [float(r.get("cvss_score") or 0) for r in train]
     test_cvss = [float(r.get("cvss_score") or 0) for r in test]

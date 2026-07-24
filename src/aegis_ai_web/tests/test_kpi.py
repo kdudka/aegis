@@ -3,11 +3,12 @@ Tests for KPI endpoint module.
 """
 
 import csv
+
 from fastapi.testclient import TestClient
 
-from aegis_ai_web.src.main import app
-from aegis_ai_web.src.feedback_logger import feedback_logger
 from aegis_ai_web.src.data_models import FEEDBACK_SCHEMA, PROGRAMMATIC_FEEDBACK_SCHEMA
+from aegis_ai_web.src.feedback_logger import feedback_logger
+from aegis_ai_web.src.main import app
 
 client = TestClient(app)
 

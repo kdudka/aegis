@@ -1,6 +1,8 @@
 import asyncio
 import logging
-from typing import Any, AsyncGenerator, Optional, Tuple, cast
+from collections.abc import AsyncGenerator
+from typing import Any, cast
+
 import httpx
 import osidb_bindings
 
@@ -31,8 +33,6 @@ class OSIDBAuthError(Exception):
     - OSIDB is not configured for process-level auth (no keytab/env),
     - Delegated token acquisition failed (e.g. OSIDB /auth/token rejected the creds).
     """
-
-    pass
 
 
 class OSIDBFlawNotFoundError(Exception):
@@ -87,7 +87,7 @@ class OSIDBClient:
         self._session = None
         self._session_lock = asyncio.Lock()
 
-    async def _get_delegated_token(self) -> Optional[str]:
+    async def _get_delegated_token(self) -> str | None:
         """If the current request has GSSAPI delegated creds, return an OSIDB JWT for that user."""
         scope = get_request_scope()
         if not scope:
@@ -118,7 +118,7 @@ class OSIDBClient:
 
     async def _get_session_or_token(
         self,
-    ) -> Tuple[Optional[object], Optional[str]]:
+    ) -> tuple[object | None, str | None]:
         """
         Return (session, token). Exactly one is non-None.
         session: process-level bindings session for API calls.

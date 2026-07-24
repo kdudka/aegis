@@ -10,7 +10,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Protocol
+from typing import Protocol
 
 from aegis_ai import __version__, get_settings
 from aegis_ai_web.src.data_models import FEEDBACK_SCHEMA, PROGRAMMATIC_FEEDBACK_SCHEMA
@@ -22,9 +22,9 @@ class FeedbackSchemaProtocol(Protocol):
     """Protocol for feedback schema classes."""
 
     @property
-    def field_names(self) -> List[str]: ...
+    def field_names(self) -> list[str]: ...
 
-    def validate_parsed_log(self, parsed_data: Dict[str, str] | None) -> bool: ...
+    def validate_parsed_log(self, parsed_data: dict[str, str] | None) -> bool: ...
 
 
 class FeedbackLogger:
@@ -124,7 +124,7 @@ class FeedbackLogger:
                 # Release lock
                 fcntl.flock(csvfile.fileno(), fcntl.LOCK_UN)
 
-    def read(self) -> List[Dict[str, str]]:
+    def read(self) -> list[dict[str, str]]:
         """
         Read and parse feedback log entries from CSV file.
 
@@ -154,7 +154,7 @@ class FeedbackLogger:
                                     row[field] = ""
 
                             # Normalize accept field to lowercase
-                            if "accept" in row and row["accept"]:
+                            if row.get("accept"):
                                 row["accept"] = row["accept"].lower()
                             entries.append(row)
                         else:
@@ -177,7 +177,7 @@ class FeedbackLogger:
         datetime_str: str,
         cve_id: str,
         feature: str,
-        updates: Dict[str, str],
+        updates: dict[str, str],
     ) -> bool:
         """
         Update fields in a specific CSV log entry.

@@ -5,18 +5,17 @@ Tests run in offline mode: Session (osidb_bindings.session) and CVE features
 (aegis_ai.features.cve) are mocked so no OSIDB or LLM calls are made.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from typing import cast
+import pytest
 
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.data_models import AegisAnswer
 from aegis_ai.osidb_bot.bot import FlawUpdater
 from aegis_ai.osidb_bot.suggest import METRICS_THR, update_field
-
 
 CVE_ID: CVEID = "CVE-2025-0001"
 
@@ -53,7 +52,7 @@ def _mock_session(flaw_data: dict) -> MagicMock:
     session = MagicMock()
     session.flaws.retrieve.return_value = MagicMock(to_dict=lambda: flaw_data)
     session.status.return_value = MagicMock(
-        dt=datetime(2025, 3, 13, 12, 0, 0, tzinfo=timezone.utc)
+        dt=datetime(2025, 3, 13, 12, 0, 0, tzinfo=UTC)
     )
     session.flaws.update = MagicMock()
     session.flaws.cvss_scores = MagicMock()
@@ -280,7 +279,7 @@ async def test_flaw_updater_read_only_skips_osidb_writes(mock_exec_feature):
 
 LOW_QUALITY = METRICS_THR["data_quality"]["skip_thr"]
 LOW_CONFIDENCE = METRICS_THR["confidence"]["skip_thr"]
-TS = datetime(2025, 3, 13, 12, 0, 0, tzinfo=timezone.utc)
+TS = datetime(2025, 3, 13, 12, 0, 0, tzinfo=UTC)
 
 
 def test_update_field_skipped_low_data_quality():

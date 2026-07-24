@@ -6,7 +6,7 @@ including the Pydantic model for API requests and the canonical schema for loggi
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,7 @@ class CVEAnalysisRequestBase(BaseModel):
     model_config = {"extra": "allow"}
 
     cve_id: CVEID = Field(..., description="CVE identifier (e.g. CVE-2025-12345)")
-    agent: Optional[str] = Field(
+    agent: str | None = Field(
         default=None,
         description="Agent to use: 'public' (no OSIDB tools) or 'redhat' (with OSIDB tools). "
         "Defaults to the server-configured agent (AEGIS_WEB_FEATURE_AGENT).",
@@ -34,18 +34,18 @@ class CVESingleAnalysisRequest(CVEAnalysisRequestBase):
 
 
 class CVEMultiAnalysisRequest(CVEAnalysisRequestBase):
-    features: Optional[List[str]] = Field(
+    features: list[str] | None = Field(
         default=None,
         description="Feature names to run. If omitted or empty, a default set of stable features is run.",
     )
 
 
 class CVEMultiAnalysisResponse(BaseModel):
-    results: Dict[str, Any] = Field(
+    results: dict[str, Any] = Field(
         default_factory=dict,
         description="Feature name to output model (or null on failure).",
     )
-    errors: Dict[str, FeatureError] = Field(
+    errors: dict[str, FeatureError] = Field(
         default_factory=dict,
         description="Feature name to error detail (only for failures).",
     )
@@ -62,11 +62,11 @@ class Feedback(BaseModel):
     feature: str = Field(..., min_length=1, max_length=100)
     cve_id: CVEID = Field(...)
     email: str = Field(..., min_length=1, max_length=100)
-    request_time: Optional[str] = Field("", max_length=50)
-    actual: Optional[str] = Field("", max_length=5000)  # Increased for longer values
-    expected: Optional[str] = Field("", max_length=5000)  # Increased for longer values
+    request_time: str | None = Field("", max_length=50)
+    actual: str | None = Field("", max_length=5000)  # Increased for longer values
+    expected: str | None = Field("", max_length=5000)  # Increased for longer values
     accept: bool = Field(False)
-    rejection_comment: Optional[str] = Field("", max_length=5000)
+    rejection_comment: str | None = Field("", max_length=5000)
 
 
 @dataclass(frozen=True)
@@ -82,7 +82,7 @@ class FeedbackSchema:
     """
 
     # Field names in order - set in __post_init__
-    FIELDS: List[str] = field(init=False)
+    FIELDS: list[str] = field(init=False)
 
     def __post_init__(self):
         # Use object.__setattr__ to set frozen dataclass field
@@ -104,16 +104,16 @@ class FeedbackSchema:
         )
 
     @property
-    def field_names(self) -> List[str]:
+    def field_names(self) -> list[str]:
         """Get list of field names in order."""
         return self.FIELDS
 
     @property
-    def csv_headers(self) -> List[str]:
+    def csv_headers(self) -> list[str]:
         """Get CSV header names (same as field names)."""
         return self.FIELDS
 
-    def validate_parsed_log(self, parsed_data: Optional[Dict[str, str]]) -> bool:
+    def validate_parsed_log(self, parsed_data: dict[str, str] | None) -> bool:
         """
         Validate that parsed log data contains exactly the schema fields with non-None values.
 
@@ -137,7 +137,7 @@ class FeedbackSchema:
         # CSV reader returns None for missing columns
         return all(v is not None for v in parsed_data.values())
 
-    def validate_csv_headers(self, csv_headers: List[str]) -> bool:
+    def validate_csv_headers(self, csv_headers: list[str]) -> bool:
         """
         Validate that CSV headers match the schema exactly.
 
@@ -149,7 +149,7 @@ class FeedbackSchema:
         """
         return csv_headers == self.FIELDS
 
-    def get_field_description(self, field_name: str) -> Optional[str]:
+    def get_field_description(self, field_name: str) -> str | None:
         """
         Get description for a field.
 
@@ -193,8 +193,8 @@ class ProgrammaticFeedback(BaseModel):
     feature: str = Field(..., min_length=1, max_length=100)
     cve_id: CVEID = Field(...)
     email: str = Field(..., min_length=1, max_length=100)
-    suggested_value: Optional[str] = Field("", max_length=5000)
-    submitted_value: Optional[str] = Field("", max_length=5000)
+    suggested_value: str | None = Field("", max_length=5000)
+    submitted_value: str | None = Field("", max_length=5000)
 
 
 @dataclass(frozen=True)
@@ -205,7 +205,7 @@ class ProgrammaticFeedbackSchema:
     This schema defines the exact fields and their order for CSV logging.
     """
 
-    FIELDS: List[str] = field(init=False)
+    FIELDS: list[str] = field(init=False)
 
     def __post_init__(self):
         object.__setattr__(
@@ -225,16 +225,16 @@ class ProgrammaticFeedbackSchema:
         )
 
     @property
-    def field_names(self) -> List[str]:
+    def field_names(self) -> list[str]:
         """Get list of field names in order."""
         return self.FIELDS
 
     @property
-    def csv_headers(self) -> List[str]:
+    def csv_headers(self) -> list[str]:
         """Get CSV header names (same as field names)."""
         return self.FIELDS
 
-    def validate_parsed_log(self, parsed_data: Optional[Dict[str, str]]) -> bool:
+    def validate_parsed_log(self, parsed_data: dict[str, str] | None) -> bool:
         """
         Validate that parsed log data contains required schema fields.
 
@@ -276,7 +276,7 @@ class ProgrammaticFeedbackSchema:
 PROGRAMMATIC_FEEDBACK_SCHEMA = ProgrammaticFeedbackSchema()
 
 
-def validate_log_parser_output(parsed_data: Optional[Dict[str, str]]) -> bool:
+def validate_log_parser_output(parsed_data: dict[str, str] | None) -> bool:
     """
     Convenience function to validate parsed log data.
 
@@ -311,7 +311,7 @@ def validate_log_parser_output(parsed_data: Optional[Dict[str, str]]) -> bool:
     return True
 
 
-def validate_csv_headers(csv_headers: List[str]) -> bool:
+def validate_csv_headers(csv_headers: list[str]) -> bool:
     """
     Convenience function to validate CSV headers.
 
@@ -363,7 +363,7 @@ class FeatureKPI(BaseModel):
         le=100.0,
         description="Acceptance score as a percentage (0.0 to 100.0, e.g., 75.0 for 75%)",
     )
-    entries: List[KPIEntry] = Field(
+    entries: list[KPIEntry] = Field(
         ...,
         description="List of log entries filtered by feature, sorted by datetime",
     )

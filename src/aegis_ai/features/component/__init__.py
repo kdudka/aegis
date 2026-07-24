@@ -2,8 +2,8 @@ import logging
 
 from aegis_ai.features import Feature
 from aegis_ai.features.component.data_models import (
-    ComponentIntelligenceModel,
     ComponentFeatureInput,
+    ComponentIntelligenceModel,
 )
 from aegis_ai.prompt import AegisPrompt
 

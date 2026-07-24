@@ -13,8 +13,9 @@ These tests cover:
 - Error and embargo-handling branches in get_flaw_data.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from aegis_ai.request_context import get_request_scope, set_request_scope
 from aegis_ai.toolsets.tools.osidb import osidb_client
@@ -161,13 +162,15 @@ class TestOSIDBClientDelegatedTokenPath:
         err.response = resp
 
         client = osidb_client.OSIDBClient()
-        with patch.object(
-            osidb_client.osidb_bindings,
-            "new_session",
-            side_effect=err,
+        with (
+            patch.object(
+                osidb_client.osidb_bindings,
+                "new_session",
+                side_effect=err,
+            ),
+            pytest.raises(OSIDBUnauthorizedError),
         ):
-            with pytest.raises(OSIDBUnauthorizedError):
-                await client.get_flaw_data("CVE-2026-4404", include_embargoed=False)
+            await client.get_flaw_data("CVE-2026-4404", include_embargoed=False)
 
     async def test_list_component_flaws_uses_token_when_scope_has_token(self):
         """When scope has token, list_component_flaws uses Bearer token for list API."""
@@ -284,13 +287,15 @@ class TestOSIDBClientDelegatedTokenPath:
         mock_client_ctx.__aenter__ = AsyncMock(return_value=mock_http_client)
         mock_client_ctx.__aexit__ = AsyncMock(return_value=None)
 
-        with patch.object(
-            osidb_client.httpx,
-            "AsyncClient",
-            return_value=mock_client_ctx,
+        with (
+            patch.object(
+                osidb_client.httpx,
+                "AsyncClient",
+                return_value=mock_client_ctx,
+            ),
+            pytest.raises(ValueError, match="Could not retrieve CVE-2024-1234"),
         ):
-            with pytest.raises(ValueError, match="Could not retrieve CVE-2024-1234"):
-                await client.get_flaw_data("CVE-2024-1234", include_embargoed=False)
+            await client.get_flaw_data("CVE-2024-1234", include_embargoed=False)
 
     async def test_get_flaw_data_embargoed_returned_with_flag(self, mocker):
         """When include_embargoed=True, an embargoed flaw is returned as-is (Bearer path)."""

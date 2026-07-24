@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
 
@@ -23,7 +22,6 @@ from aegis_ai.data_models import CVEID
 from aegis_ai.features.cve import SuggestAffectedComponents
 from aegis_ai.features.cve.data_models import SuggestAffectedComponentsModel
 from aegis_ai.toolsets.tools.osidb import CVE
-
 from evals.features.common import (
     FeatureMetricsEvaluator,
     ToolsUsedEvaluator,

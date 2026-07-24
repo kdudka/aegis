@@ -1,16 +1,17 @@
 import asyncio
 import logging
-
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable
+from collections.abc import Awaitable
+from typing import Any
 
-from aegis_ai import get_env_int, get_settings
 from google.genai.errors import ServerError
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.run import AgentRunResult
+
+from aegis_ai import get_env_int, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ async def run_with_heartbeat(runner: Awaitable, prefix: str) -> AgentRunResult:
         while not done_event.is_set():
             try:
                 await asyncio.wait_for(done_event.wait(), timeout=PROMPT_INFO_PERIOD)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 elapsed = int(loop.time() - start_ts)
                 logger.info(f"{prefix}: still running after {elapsed}s")
 
@@ -187,7 +188,7 @@ class Feature(ABC):
             runner = self.agent.run(prompt_text, **kwargs)
             return await run_with_heartbeat(runner, prefix=call_str)
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # fmt: off
             msg = f"{call_str}: LLM request timed out after {llm_prompt_timeout} seconds"
             logger.warning(msg)

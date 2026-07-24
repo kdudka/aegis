@@ -4,13 +4,12 @@ KPI endpoint module for CVE analysis feedback.
 
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Tuple
-
 from enum import Enum
+from typing import Any
 
 from fastapi import HTTPException
 
-from aegis_ai_web.src.data_models import KPIEntry, FeatureKPI
+from aegis_ai_web.src.data_models import FeatureKPI, KPIEntry
 from aegis_ai_web.src.feedback_logger import (
     feedback_logger,
     programmatic_feedback_logger,
@@ -35,7 +34,7 @@ def _parse_datetime_str(dt_str: str) -> datetime:
             return datetime.fromtimestamp(0)
 
 
-def _standard_entry_to_kpi(entry: Dict[str, Any]) -> KPIEntry:
+def _standard_entry_to_kpi(entry: dict[str, Any]) -> KPIEntry:
     """Convert standard feedback log entry to KPIEntry."""
     accept_value = entry.get("accept", "")
     return KPIEntry(
@@ -45,7 +44,7 @@ def _standard_entry_to_kpi(entry: Dict[str, Any]) -> KPIEntry:
     )
 
 
-def _programmatic_entry_to_kpi(entry: Dict[str, Any]) -> KPIEntry | None:
+def _programmatic_entry_to_kpi(entry: dict[str, Any]) -> KPIEntry | None:
     """Convert programmatic feedback entry to KPIEntry, or None if no valid score."""
     score_str = entry.get("acceptance_score", "")
     if not score_str:
@@ -62,8 +61,8 @@ def _programmatic_entry_to_kpi(entry: Dict[str, Any]) -> KPIEntry | None:
 
 
 def _deduplicate_programmatic_feedback(
-    entries: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """
     Deduplicate programmatic feedback entries by (cve_id, feature), keeping the most recent.
 
@@ -73,7 +72,7 @@ def _deduplicate_programmatic_feedback(
     Returns:
         List of deduplicated entries, keeping only the most recent entry per (cve_id, feature)
     """
-    deduped: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    deduped: dict[tuple[str, str], dict[str, Any]] = {}
 
     for entry in entries:
         # Always overwrite the entry with the most recent one
@@ -85,7 +84,7 @@ def _deduplicate_programmatic_feedback(
     return list(deduped.values())
 
 
-def _compute_kpi(entries: List[KPIEntry], order: SortOrder) -> FeatureKPI:
+def _compute_kpi(entries: list[KPIEntry], order: SortOrder) -> FeatureKPI:
     """Compute KPI metrics from a list of KPIEntry objects."""
     if not entries:
         return FeatureKPI(acceptance_percentage=0.0, entries=[])
@@ -101,9 +100,9 @@ def _compute_kpi(entries: List[KPIEntry], order: SortOrder) -> FeatureKPI:
     return FeatureKPI(acceptance_percentage=acceptance_percentage, entries=entries)
 
 
-def _get_all_features_kpi(order: SortOrder = SortOrder.ASC) -> Dict[str, FeatureKPI]:
+def _get_all_features_kpi(order: SortOrder = SortOrder.ASC) -> dict[str, FeatureKPI]:
     """Get KPI metrics for all features in a single pass over log data."""
-    entries_by_feature: Dict[str, List[KPIEntry]] = {}
+    entries_by_feature: dict[str, list[KPIEntry]] = {}
 
     # Process standard feedback
     for entry in feedback_logger.read():
@@ -131,7 +130,7 @@ def _get_all_features_kpi(order: SortOrder = SortOrder.ASC) -> Dict[str, Feature
 
 def get_cve_kpi(
     feature: str, order: SortOrder = SortOrder.ASC
-) -> Dict[str, FeatureKPI]:
+) -> dict[str, FeatureKPI]:
     """
     Get KPI metrics for CVE analysis feedback filtered by feature.
 
@@ -156,7 +155,7 @@ def get_cve_kpi(
             )
 
     try:
-        entries: List[KPIEntry] = []
+        entries: list[KPIEntry] = []
 
         # Standard feedback
         for entry in feedback_logger.read():

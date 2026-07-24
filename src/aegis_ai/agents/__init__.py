@@ -10,8 +10,8 @@ from pydantic_ai.output import OutputSpec
 from aegis_ai import get_env_int, get_settings
 from aegis_ai.features.data_models import AegisAnswer
 from aegis_ai.toolsets import (
-    public_toolset,
     public_cve_toolset,
+    public_toolset,
     redhat_cve_toolset,
 )
 

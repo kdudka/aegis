@@ -3,11 +3,11 @@ aegis cli
 
 """
 
+import asyncio
 import logging
+from datetime import UTC
 
 import click
-import asyncio
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -17,8 +17,7 @@ from aegis_ai import check_llm_status, config_logging, get_settings
 from aegis_ai.data_models import CVEID
 from aegis_ai.features import component, cve
 from aegis_ai.features.data_models import AegisAnswer
-
-from aegis_ai_cli import print_version, feature_agent
+from aegis_ai_cli import feature_agent, print_version
 
 console = Console()
 
@@ -443,7 +442,7 @@ def osidb_bot(state_file, force, read_only, max_age, max_retries, cve_ids):
     logging.getLogger("aegis_ai.toolsets").addFilter(SuppressToolCallFilter())
 
     # parse --max-age and compute a cutoff datetime
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     age_str = max_age or DEFAULT_MAX_AGE
     parsed = parse_duration(age_str)
@@ -451,7 +450,7 @@ def osidb_bot(state_file, force, read_only, max_age, max_retries, cve_ids):
         raise click.BadParameter(
             f"invalid duration: {age_str!r}", param_hint="--max-age"
         )
-    age_cutoff = datetime.now(tz=timezone.utc) - timedelta(seconds=parsed)
+    age_cutoff = datetime.now(tz=UTC) - timedelta(seconds=parsed)
 
     if cve_ids and max_age is not None:
         logger.warning("--max-age has no effect when CVE IDs are given as arguments")

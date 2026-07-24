@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import osidb_bindings
+
 from aegis_ai.kernel_classifier.training_input import (
     LinuxVulnsResolver,
     build_generation_report,

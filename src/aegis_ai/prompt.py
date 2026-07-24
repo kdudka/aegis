@@ -1,5 +1,3 @@
-from typing import Optional
-
 from pydantic import BaseModel
 
 from aegis_ai import get_settings, logger
@@ -35,7 +33,7 @@ class AegisPrompt(BaseModel):
     context: BaseModel
 
     # Output data schema
-    output_schema: Optional[dict] = None
+    output_schema: dict | None = None
 
     async def is_safe(self):
         """Prompt safety check"""

@@ -5,7 +5,6 @@ context in the request scope so OSIDB can use the client's Kerberos identity
 
 import base64
 import logging
-from typing import Union
 
 from gssapi.creds import Credentials
 from gssapi.names import Name
@@ -25,7 +24,7 @@ class GSSAPIDelegationMiddleware:
     code can use delegated_creds for OSIDB (pass-through authentication).
     """
 
-    def __init__(self, app: ASGIApp, *, spn: Union[str, Name, None] = None) -> None:
+    def __init__(self, app: ASGIApp, *, spn: str | Name | None = None) -> None:
         if isinstance(spn, str):
             spn = Name(spn)
         self.app = app

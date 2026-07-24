@@ -1,23 +1,46 @@
 import base64
 import logging
 import os
-import pytest
 
+import pytest
 from pydantic_ai.tools import RunContext, Tool
 from pydantic_ai.toolsets import CombinedToolset, FunctionToolset
 
+import aegis_ai.toolsets as ts
 from aegis_ai import config_logging
 from aegis_ai.features.data_models import feature_deps
-from aegis_ai.toolsets.tools.osidb import CVE, cve_exclude_fields, OSIDBToolInput
+from aegis_ai.toolsets.tools.osidb import CVE, OSIDBToolInput, cve_exclude_fields
 from aegis_ai.toolsets.tools.osv_dev_cve import OSVToolInput as OSVCVEToolInput
 from aegis_ai.toolsets.tools.osv_dev_ghsa import (
     GHSAToolInput,
-    extract_ghsa_ids,
     _filter_osv_response,
+    extract_ghsa_ids,
 )
-import aegis_ai.toolsets as ts
-
 from evals.features.common import eval_metrics, eval_summary
+from evals.utils.external_references_cache import (
+    cache_misses as extref_cache_misses,
+)
+from evals.utils.external_references_cache import (
+    extref_cache_retrieve,
+)
+from evals.utils.external_references_cache import (
+    get_miss_files as get_extref_miss_files,
+)
+from evals.utils.external_references_cache import (
+    write_misses_report as write_extref_misses_report,
+)
+from evals.utils.ghsa_cache import (
+    cache_misses as ghsa_cache_misses,
+)
+from evals.utils.ghsa_cache import (
+    get_miss_files as get_ghsa_miss_files,
+)
+from evals.utils.ghsa_cache import (
+    ghsa_cache_retrieve,
+)
+from evals.utils.ghsa_cache import (
+    write_misses_report as write_ghsa_misses_report,
+)
 from evals.utils.kernel_cve_context_cache import (
     cache_misses,
     kernel_cve_cache_lookup,
@@ -30,22 +53,16 @@ from evals.utils.kernel_patch_cache import (
     patch_cache_misses,
     write_patch_cache_misses_report,
 )
-from evals.utils.external_references_cache import (
-    cache_misses as extref_cache_misses,
-    extref_cache_retrieve,
-    get_miss_files as get_extref_miss_files,
-    write_misses_report as write_extref_misses_report,
-)
-from evals.utils.ghsa_cache import (
-    cache_misses as ghsa_cache_misses,
-    get_miss_files as get_ghsa_miss_files,
-    ghsa_cache_retrieve,
-    write_misses_report as write_ghsa_misses_report,
-)
 from evals.utils.osidb_cache import (
     cache_misses as osidb_cache_misses,
+)
+from evals.utils.osidb_cache import (
     get_miss_files as get_osidb_miss_files,
+)
+from evals.utils.osidb_cache import (
     osidb_cache_retrieve,
+)
+from evals.utils.osidb_cache import (
     write_misses_report as write_osidb_misses_report,
 )
 

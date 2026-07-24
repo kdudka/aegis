@@ -27,12 +27,14 @@ def strip_html(raw: str) -> str:
     (daemon lines 1522-1525).  Returns original-case text (callers
     lowercase where needed; the ``CPU`` check is case-sensitive).
     """
-    s = re.sub(r"<script[^>]*>.*?</script[^>]*>", " ", raw, flags=re.S | re.I)
-    s = re.sub(r"<style[^>]*>.*?</style[^>]*>", " ", s, flags=re.S | re.I)
-    s = re.sub(r"<[^>]+>", " ", s, flags=re.S | re.I)
-    s = re.sub(r"\s+", " ", s, flags=re.S | re.I)
+    s = re.sub(
+        r"<script[^>]*>.*?</script[^>]*>", " ", raw, flags=re.DOTALL | re.IGNORECASE
+    )
+    s = re.sub(r"<style[^>]*>.*?</style[^>]*>", " ", s, flags=re.DOTALL | re.IGNORECASE)
+    s = re.sub(r"<[^>]+>", " ", s, flags=re.DOTALL | re.IGNORECASE)
+    s = re.sub(r"\s+", " ", s, flags=re.DOTALL | re.IGNORECASE)
     for chrome in GITHUB_CHROME_REMOVALS:
-        s = re.sub(re.escape(chrome), "", s, flags=re.I)
+        s = re.sub(re.escape(chrome), "", s, flags=re.IGNORECASE)
     return s
 
 

@@ -1,10 +1,13 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 import yaml
-from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from aegis_ai.features import Feature, component as component_features
+from aegis_ai.agents import public_feature_agent, rh_feature_agent
+from aegis_ai.features import Feature
+from aegis_ai.features import component as component_features
 from aegis_ai.features import cve as cve_features
 from aegis_ai.features.component.data_models import ComponentIntelligenceModel
 from aegis_ai.features.cve.data_models import SuggestAffectedComponentsModel
@@ -12,12 +15,11 @@ from aegis_ai.toolsets.tools.osidb.osidb_client import (
     OSIDBFlawNotFoundError,
     OSIDBUnauthorizedError,
 )
-from aegis_ai.agents import public_feature_agent, rh_feature_agent
 from aegis_ai_web.src.main import (
-    app,
-    cve_feature_registry,
     DEFAULT_CVE_FEATURES,
     _resolve_agent,
+    app,
+    cve_feature_registry,
     llm_agent,
 )
 
@@ -426,20 +428,22 @@ class TestCveMultiAnalysis:
 
     def test_partial_failure(self):
         mock_result = _make_mock_result(_make_sac_output())
-        with _patch_all_cve_feature_execs(mock_result):
-            with patch.object(
+        with (
+            _patch_all_cve_feature_execs(mock_result),
+            patch.object(
                 cve_features.SuggestImpact,
                 "exec",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("LLM timeout"),
-            ):
-                response = client.post(
-                    "/api/v1/analysis/cve",
-                    json={
-                        "cve_id": "CVE-2024-1234",
-                        "features": ["suggest-impact", "suggest-cwe"],
-                    },
-                )
+            ),
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": ["suggest-impact", "suggest-cwe"],
+                },
+            )
         assert response.status_code == 200
         data = response.json()
         assert data["results"]["suggest-impact"] is None
@@ -450,20 +454,22 @@ class TestCveMultiAnalysis:
 
     def test_osidb_error_mapped_per_feature(self):
         mock_result = _make_mock_result(_make_sac_output())
-        with _patch_all_cve_feature_execs(mock_result):
-            with patch.object(
+        with (
+            _patch_all_cve_feature_execs(mock_result),
+            patch.object(
                 cve_features.SuggestCWE,
                 "exec",
                 new_callable=AsyncMock,
                 side_effect=OSIDBFlawNotFoundError("CVE-2024-1234"),
-            ):
-                response = client.post(
-                    "/api/v1/analysis/cve",
-                    json={
-                        "cve_id": "CVE-2024-1234",
-                        "features": ["suggest-cwe", "identify-pii"],
-                    },
-                )
+            ),
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": ["suggest-cwe", "identify-pii"],
+                },
+            )
         assert response.status_code == 200
         data = response.json()
         assert data["results"]["suggest-cwe"] is None
@@ -493,44 +499,48 @@ class TestCveMultiAnalysis:
         mock_result = _make_mock_result(_make_sac_output())
         sac_result = _make_mock_result(_make_sac_output())
 
-        with _patch_all_cve_feature_execs(mock_result):
-            with patch.object(
+        with (
+            _patch_all_cve_feature_execs(mock_result),
+            patch.object(
                 cve_features.SuggestAffectedComponents,
                 "exec",
                 new_callable=AsyncMock,
                 return_value=sac_result,
-            ) as mock_sac_exec:
-                response = client.post(
-                    "/api/v1/analysis/cve",
-                    json={
-                        "cve_id": "CVE-2024-1234",
-                        "features": ["suggest-impact", "suggest-cwe"],
-                        "title": "kernel: buffer overflow",
-                        "comment_zero": "A buffer overflow was found.",
-                    },
-                )
+            ) as mock_sac_exec,
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": ["suggest-impact", "suggest-cwe"],
+                    "title": "kernel: buffer overflow",
+                    "comment_zero": "A buffer overflow was found.",
+                },
+            )
         assert response.status_code == 200
         mock_sac_exec.assert_called_once()
 
     def test_component_inference_skipped_when_components_provided(self):
         mock_result = _make_mock_result(_make_sac_output())
 
-        with _patch_all_cve_feature_execs(mock_result):
-            with patch.object(
+        with (
+            _patch_all_cve_feature_execs(mock_result),
+            patch.object(
                 cve_features.SuggestAffectedComponents,
                 "exec",
                 new_callable=AsyncMock,
-            ) as mock_sac_exec:
-                response = client.post(
-                    "/api/v1/analysis/cve",
-                    json={
-                        "cve_id": "CVE-2024-1234",
-                        "features": ["suggest-impact"],
-                        "title": "kernel: buffer overflow",
-                        "comment_zero": "A buffer overflow was found.",
-                        "components": ["kernel"],
-                    },
-                )
+            ) as mock_sac_exec,
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": ["suggest-impact"],
+                    "title": "kernel: buffer overflow",
+                    "comment_zero": "A buffer overflow was found.",
+                    "components": ["kernel"],
+                },
+            )
         assert response.status_code == 200
         mock_sac_exec.assert_not_called()
 
@@ -580,25 +590,27 @@ class TestCveMultiAnalysis:
     def test_sac_failure_does_not_block_siblings(self):
         """If SAC fails, sibling features still run and SAC error is recorded."""
         mock_result = _make_mock_result(_make_sac_output())
-        with _patch_all_cve_feature_execs(mock_result):
-            with patch.object(
+        with (
+            _patch_all_cve_feature_execs(mock_result),
+            patch.object(
                 cve_features.SuggestAffectedComponents,
                 "exec",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("SAC timeout"),
-            ):
-                response = client.post(
-                    "/api/v1/analysis/cve",
-                    json={
-                        "cve_id": "CVE-2024-1234",
-                        "features": [
-                            "suggest-affected-components",
-                            "suggest-impact",
-                        ],
-                        "title": "kernel: buffer overflow",
-                        "comment_zero": "A buffer overflow was found.",
-                    },
-                )
+            ),
+        ):
+            response = client.post(
+                "/api/v1/analysis/cve",
+                json={
+                    "cve_id": "CVE-2024-1234",
+                    "features": [
+                        "suggest-affected-components",
+                        "suggest-impact",
+                    ],
+                    "title": "kernel: buffer overflow",
+                    "comment_zero": "A buffer overflow was found.",
+                },
+            )
         assert response.status_code == 200
         data = response.json()
         assert data["results"]["suggest-affected-components"] is None

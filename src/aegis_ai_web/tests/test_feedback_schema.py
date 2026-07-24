@@ -6,14 +6,14 @@ Run with: pytest src/aegis_ai_web/tests/test_feedback_schema.py -v
 """
 
 import dataclasses
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 import pytest
 
 from aegis_ai_web.src.data_models import (
     FEEDBACK_SCHEMA,
-    validate_log_parser_output,
     validate_csv_headers,
+    validate_log_parser_output,
 )
 
 
@@ -113,7 +113,7 @@ class TestFeedbackSchema:
 
         # Cast to expected type for type checker; we're intentionally testing None values
         assert (
-            FEEDBACK_SCHEMA.validate_parsed_log(cast(Dict[str, str], invalid_data))
+            FEEDBACK_SCHEMA.validate_parsed_log(cast(dict[str, str], invalid_data))
             is False
         )
 

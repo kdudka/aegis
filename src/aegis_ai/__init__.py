@@ -3,25 +3,22 @@ aegis
 
 """
 
-import httpx
 import logging
 import os
 import sys
 import warnings
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional, TypedDict, TypeIs
 from urllib.parse import urlparse
 
-from pathlib import Path
-from typing import Dict, List, Any, Optional, TypedDict, TypeIs
-
-from platformdirs import user_config_dir
-from functools import lru_cache
-
-from dotenv import load_dotenv
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings
-
+import httpx
 from _pytest._io import TerminalWriter
 from _pytest.logging import ColoredLevelFormatter
+from dotenv import load_dotenv
+from platformdirs import user_config_dir
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings
 
 # google-genai uses typing._UnionGenericAlias (deprecated in 3.14, removal 3.17); filter before any google.genai import
 warnings.filterwarnings(
@@ -50,7 +47,7 @@ config_dir = Path(user_config_dir(appname=APP_NAME))
 config_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _is_env_set(value: Optional[str]) -> TypeIs[str]:
+def _is_env_set(value: str | None) -> TypeIs[str]:
     return bool(value and value.strip())
 
 
@@ -89,7 +86,7 @@ def get_env_int(key: str, default: int) -> int:
     return int(value) if _is_env_set(value) else default
 
 
-def _llm_base_url_hostname(host: str) -> Optional[str]:
+def _llm_base_url_hostname(host: str) -> str | None:
     """Return the hostname from ``AEGIS_LLM_HOST`` for provider selection.
 
     Values may be ``host:port`` or a full URL. Prepends ``https://`` when no
@@ -230,10 +227,10 @@ class AppSettings(BaseSettings):
     )
 
     # shared kwargs for model settings usage across the codebase
-    model_kwargs: Dict[str, Any] = Field(default_factory=dict)
+    model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     # customized httpx.AsyncClient with enhanced logging
-    http_client: Optional[httpx.AsyncClient] = Field(
+    http_client: httpx.AsyncClient | None = Field(
         default=None, exclude=True, repr=False
     )
 
@@ -265,7 +262,7 @@ class AppSettings(BaseSettings):
         host = self.default_llm_host
         llm_hostname = _llm_base_url_hostname(host)
 
-        self.model_kwargs: Dict[str, Any] = {
+        self.model_kwargs: dict[str, Any] = {
             "temperature": self.default_llm_temperature,
             "top_p": self.default_llm_top_p,
         }
@@ -281,12 +278,12 @@ class AppSettings(BaseSettings):
 
         elif llm_hostname == "generativelanguage.googleapis.com":
             # lazy import of modules to speed up Aegis CLI
-            from pydantic_ai.models.google import GoogleModelSettings
             from google.genai.types import (
-                HarmCategory,
                 HarmBlockThreshold,
+                HarmCategory,
                 SafetySettingDict,
             )
+            from pydantic_ai.models.google import GoogleModelSettings
 
             google_safety_settings: list[SafetySettingDict] = [
                 {
@@ -452,8 +449,8 @@ def check_llm_status() -> bool:
 
 
 def remove_keys(
-    data: Optional[Dict[str, Any]], keys_to_remove: List[str]
-) -> Dict[str, Any]:
+    data: dict[str, Any] | None, keys_to_remove: list[str]
+) -> dict[str, Any]:
     if not data:
         return {}
     return {k: v for k, v in data.items() if k not in keys_to_remove}

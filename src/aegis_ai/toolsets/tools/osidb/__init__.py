@@ -3,7 +3,6 @@ import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import Field
-
 from pydantic_ai import (
     RunContext,
     Tool,
@@ -12,9 +11,9 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from aegis_ai import get_env_flag
 from aegis_ai.data_models import CVEID, cveid_validator
-from aegis_ai.kernel_classifier import is_kernel_component
 from aegis_ai.features.data_models import feature_deps
-from aegis_ai.toolsets.tools import BaseToolOutput, BaseToolInput
+from aegis_ai.kernel_classifier import is_kernel_component
+from aegis_ai.toolsets.tools import BaseToolInput, BaseToolOutput
 from aegis_ai.toolsets.tools.osidb.osidb_client import (
     OSIDBClient,
     OSIDBFlawNotFoundError,
@@ -43,11 +42,11 @@ class CVE(BaseToolOutput):
         ...,
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw",
     )
-    cwe_id: Optional[str] = Field(
+    cwe_id: str | None = Field(
         default="",
         description="CVE CWE ID",
     )
-    impact: Optional[str] = Field(
+    impact: str | None = Field(
         default="",
         description="CVE impact",
     )
@@ -55,11 +54,11 @@ class CVE(BaseToolOutput):
         default="",
         description="CVE title",
     )
-    statement: Optional[str] = Field(
+    statement: str | None = Field(
         default="",
         description="CVE statement",
     )
-    mitigation: Optional[str] = Field(
+    mitigation: str | None = Field(
         default="",
         description="CVE mitigation",
     )
@@ -75,19 +74,19 @@ class CVE(BaseToolOutput):
         default="",
         description="CVE cve_description",
     )
-    components: List = Field(
+    components: list = Field(
         default=[],
         description="list of components",
     )
-    references: List = Field(
+    references: list = Field(
         default=[],
         description="list of references",
     )
-    affects: List = Field(
+    affects: list = Field(
         default=[],
         description="list of affects",
     )
-    cvss_scores: List = Field(
+    cvss_scores: list = Field(
         default=[],
         description="list of cvss scores",
     )
@@ -97,7 +96,7 @@ class CVE(BaseToolOutput):
 _CVE_DATA_FIELDS = frozenset(CVE.model_fields) - {"cve_id", "status", "error_message"}
 
 
-def _has_sufficient_static_context(ctx: Dict[str, Any]) -> bool:
+def _has_sufficient_static_context(ctx: dict[str, Any]) -> bool:
     """True when *ctx* carries enough data to skip the OSIDB API call."""
     has_title = bool(ctx.get("title"))
     has_description = bool(
@@ -106,7 +105,7 @@ def _has_sufficient_static_context(ctx: Dict[str, Any]) -> bool:
     return has_title and has_description
 
 
-def _apply_static_overrides(cve: CVE, ctx: Dict[str, Any]) -> CVE:
+def _apply_static_overrides(cve: CVE, ctx: dict[str, Any]) -> CVE:
     """Override *cve* fields with non-empty values from *ctx* (request takes precedence)."""
     overrides: dict[str, Any] = {}
     for field in _CVE_DATA_FIELDS:
@@ -121,7 +120,7 @@ def _apply_static_overrides(cve: CVE, ctx: Dict[str, Any]) -> CVE:
     return cve
 
 
-def _cve_from_static_context(cve_id: CVEID, ctx: Dict[str, Any]) -> CVE:
+def _cve_from_static_context(cve_id: CVEID, ctx: dict[str, Any]) -> CVE:
     """Build a CVE from static_context (OSIM-style dict). Maps cve_description -> description."""
     desc = ctx.get("cve_description") or ctx.get("description") or ""
     return CVE(
@@ -166,7 +165,7 @@ def _strip_component_prefix_from_title(title: str) -> str | None:
 
 def cve_exclude_fields(
     cve: CVE,
-    exclude_fields: List[str],
+    exclude_fields: list[str],
     *,
     strip_component_prefix_for_osidb_cache: bool = False,
 ):

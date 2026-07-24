@@ -632,7 +632,7 @@ class KernelImpactClassifier:
         cve_id: str,
         commit_hashes: list[str],
         cvss_scores: list[dict],
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """Run the full kernel classification pipeline.
 
         Args:

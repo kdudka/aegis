@@ -3,12 +3,12 @@ Aegis MCP - register mcp here
 
 """
 
-import os
 import logging
+import os
 import time
-
 from typing import Any
 
+from pydantic_ai._run_context import AgentDepsT, RunContext
 from pydantic_ai.mcp import MCPToolset, StdioTransport
 from pydantic_ai.toolsets import (
     AbstractToolset,
@@ -17,10 +17,8 @@ from pydantic_ai.toolsets import (
     ToolsetTool,
 )
 from pydantic_ai.toolsets.wrapper import WrapperToolset
-from pydantic_ai._run_context import AgentDepsT, RunContext
 
 from aegis_ai import get_settings
-
 from aegis_ai.toolsets.tools.osidb import osidb_toolset
 from aegis_ai.toolsets.tools.osv_dev_cve import osv_dev_cve_tool
 from aegis_ai.toolsets.tools.osv_dev_ghsa import osv_dev_ghsa_tool

@@ -9,9 +9,9 @@ to pick them up again.
 import asyncio
 import logging
 import textwrap
-
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Optional, Sequence, cast
+from typing import Any, cast
 
 import click
 import osidb_bindings
@@ -60,8 +60,8 @@ def validate_flaw(flaw_data: dict[str, Any]) -> None:
 
 def search_manual_flaws(
     session: Any,
-    created_after: Optional[datetime],
-    created_before: Optional[datetime],
+    created_after: datetime | None,
+    created_before: datetime | None,
 ) -> Sequence[str]:
     """Search OSIDB for MANUAL-workflow flaws in the given date range."""
     kwargs: dict[str, Any] = {
@@ -242,8 +242,8 @@ async def process_all(
 def main(
     dry_run: bool,
     cve_ids: tuple[str, ...],
-    created_after: Optional[datetime],
-    created_before: Optional[datetime],
+    created_after: datetime | None,
+    created_before: datetime | None,
     jobs: int,
 ) -> None:
     """Revert flaws from MANUAL to DEFAULT workflow by removing the manual-triage label."""

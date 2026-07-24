@@ -1,4 +1,4 @@
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
 from aegis_ai.features.data_models import AegisFeatureModel
 

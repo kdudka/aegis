@@ -1,15 +1,14 @@
 import logging
+from typing import List, Literal, Optional
+
 import wikipedia
-from typing import List, Optional, Literal
-
 from pydantic import Field
-
 from pydantic_ai import (
     RunContext,
     Tool,
 )
 
-from aegis_ai.toolsets.tools import BaseToolOutput, BaseToolInput
+from aegis_ai.toolsets.tools import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +38,14 @@ class WikipediaSoftwareInfo(BaseToolOutput):
     summary: str = Field(
         ..., description="A concise summary of the software component from Wikipedia."
     )
-    sections: List[str] = Field(
+    sections: list[str] = Field(
         default_factory=list,
         description="A list of top-level section titles within the Wikipedia page.",
     )
     status: Literal["success", "not_found", "disambiguation", "error"] = Field(
         ..., description="The status of the Wikipedia information retrieval."
     )
-    error_message: Optional[str] = Field(
+    error_message: str | None = Field(
         None,
         description="An error message if the status is 'not_found', 'disambiguation', or 'error'.",
     )

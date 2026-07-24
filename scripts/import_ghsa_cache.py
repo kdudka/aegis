@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
 
-from aegis_ai.toolsets.tools.osv_dev_cve import OSVClient  # noqa: E402
-from evals.utils.ghsa_cache import GHSA_CACHE_DIR, write_ghsa_cache_entry  # noqa: E402
+from aegis_ai.toolsets.tools.osv_dev_cve import OSVClient
+from evals.utils.ghsa_cache import GHSA_CACHE_DIR, write_ghsa_cache_entry
 
 _GHSA_RE = re.compile(r"GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}")
 

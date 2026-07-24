@@ -11,12 +11,11 @@ import asyncio
 import json
 import logging
 import time
-from typing import Optional
 
 from aegis_ai import get_settings
 
 # Reuse evaluators and utilities from evals
-from evals.features.common import create_llm_judge, FIELD_RUBRICS
+from evals.features.common import FIELD_RUBRICS, create_llm_judge
 from evals.features.cve.test_suggest_cwe import SuggestCweEvaluator
 from evals.features.cve.test_suggest_impact import score_cvss3_diff, score_impact_diff
 
@@ -41,7 +40,7 @@ def get_semantic_scored_features() -> list[str]:
     ]
 
 
-def _parse_json_list(value: str) -> Optional[list[str]]:
+def _parse_json_list(value: str) -> list[str] | None:
     """
     Parse a JSON list from a string value.
 
@@ -136,7 +135,7 @@ def _is_cvss_vector(value: str) -> bool:
 
 def _score_cvss_vectors(
     suggested: str, submitted: str
-) -> tuple[Optional[float], Optional[str]]:
+) -> tuple[float | None, str | None]:
     """
     Score similarity between two CVSS vectors using score_cvss3_diff.
 
@@ -170,7 +169,7 @@ def _score_cvss_vectors(
 
 async def _score_with_llm_judge(
     suggested: str, submitted: str, rubric: str
-) -> tuple[float, Optional[str]]:
+) -> tuple[float, str | None]:
     """
     Score semantic similarity using LLMJudge from evals.
 
@@ -253,8 +252,8 @@ async def _score_with_llm_judge(
 
 
 async def calculate_semantic_proximity_score(
-    suggested: str, submitted: str, feature: str, cve_id: Optional[str] = None
-) -> tuple[Optional[float], Optional[str]]:
+    suggested: str, submitted: str, feature: str, cve_id: str | None = None
+) -> tuple[float | None, str | None]:
     """
     Calculate semantic proximity score between suggested and submitted values.
 
@@ -278,8 +277,8 @@ async def calculate_semantic_proximity_score(
     start_time = time.time()
 
     try:
-        score: Optional[float] = None
-        explanation: Optional[str] = None
+        score: float | None = None
+        explanation: str | None = None
         # Handle component list scoring
         if feature == "suggest-affected-components":
             suggested_list = _parse_json_list(suggested)
@@ -402,7 +401,7 @@ async def calculate_semantic_proximity_score(
         logger.warning(
             f"Semantic scoring failed: feature={feature}, "
             f"cve_id={cve_id or 'N/A'}, duration={duration:.3f}s, "
-            f"error={error_type}: {str(e)}"
+            f"error={error_type}: {e!s}"
         )
         logger.debug(f"Semantic scoring error details for {cve_id}", exc_info=True)
         return (None, None)

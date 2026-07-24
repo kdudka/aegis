@@ -11,7 +11,6 @@ to retry scoring for entries that initially failed.
 import argparse
 import asyncio
 import logging
-from typing import List, Dict
 
 from aegis_ai_web.src.feedback_logger import programmatic_feedback_logger
 from aegis_ai_web.src.semantic_scoring import (
@@ -29,7 +28,7 @@ logger = logging.getLogger(__name__)
 def get_unscored_entries(
     feature_filter: str | None = None,
     cve_id_filter: str | None = None,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """
     Get entries from the CSV that have empty acceptance_score and are
     for features that support semantic scoring.
@@ -66,7 +65,7 @@ def get_unscored_entries(
     return unscored
 
 
-async def retry_entry(entry: Dict[str, str], dry_run: bool = False) -> bool:
+async def retry_entry(entry: dict[str, str], dry_run: bool = False) -> bool:
     """
     Retry semantic scoring for a single entry.
 

@@ -1,5 +1,4 @@
 import pytest
-
 from pydantic_evals import Case
 from pydantic_evals.evaluators import EvaluationReason, Evaluator
 
@@ -13,7 +12,6 @@ from aegis_ai.features.cve.data_models import (
     RATING_GOOD,
     RATING_NEEDS_IMPROVEMENT,
 )
-
 from evals.features.common import (
     common_feature_evals,
     create_llm_judge,

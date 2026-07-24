@@ -9,8 +9,8 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional, Set
 
-from pydantic import Field, BaseModel
-from pydantic_ai import Tool, RunContext
+from pydantic import BaseModel, Field
+from pydantic_ai import RunContext, Tool
 
 from aegis_ai import get_settings
 from aegis_ai.data_models import CVEID
@@ -40,27 +40,27 @@ class CVEMetadata(BaseModel):
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
     )
 
-    source_files: List[str] = Field(
+    source_files: list[str] = Field(
         ...,
         description="Related source files.",
     )
 
-    commit_hashes: List[str] = Field(
+    commit_hashes: list[str] = Field(
         ...,
         description="related Git commit hashes.",
     )
 
-    affected_files: List[str] = Field(
+    affected_files: list[str] = Field(
         ...,
         description="affected files.",
     )
 
-    json_data: Optional[Dict[str, Any]] = Field(
+    json_data: dict[str, Any] | None = Field(
         ...,
         description="metadata json.",
     )
 
-    mbox_data: Optional[str] = Field(
+    mbox_data: str | None = Field(
         ...,
         description="The email information associated with linux cve discussion.",
     )
@@ -79,7 +79,7 @@ class LINUXCVEToolResponse(BaseToolOutput):
         description="The unique Common Vulnerabilities and Exposures (CVE) identifier for the security flaw.",
     )
 
-    metadata: Optional[CVEMetadata] = Field(..., description="Linux CVE metadata")
+    metadata: CVEMetadata | None = Field(..., description="Linux CVE metadata")
 
     @classmethod
     def error(cls, cve_id: CVEID, error_message: str) -> "LINUXCVEToolResponse":
@@ -157,7 +157,7 @@ class KernelVulnsRepo:
 _STABLE_URL_RE = re.compile(r"https://git\.kernel\.org/stable/c/([0-9a-fA-F]{40})")
 
 
-def _parse_mbox_content(content: str) -> Dict[str, Set[str]]:
+def _parse_mbox_content(content: str) -> dict[str, set[str]]:
     """Parses mbox content to extract fix commit hashes and affected files.
 
     Only extracts hashes from ``git.kernel.org/stable/c/`` URLs (the
@@ -169,14 +169,14 @@ def _parse_mbox_content(content: str) -> Dict[str, Set[str]]:
     return {"commits": commit_hashes, "files": affected_files}
 
 
-def _parse_json_content(data: Dict[str, Any]) -> Dict[str, Set[str]]:
+def _parse_json_content(data: dict[str, Any]) -> dict[str, set[str]]:
     """Extract fix commit hashes from CVE 5.0 JSON ``references`` array.
 
     The ``versions`` array contains both introduction and fix commits;
     ``references`` contains only fix commit URLs.  Falls back to URL
     scanning of the full document if no references are found.
     """
-    commits: Set[str] = set()
+    commits: set[str] = set()
     try:
         refs = data["containers"]["cna"]["references"]
         for ref in refs:
@@ -195,7 +195,7 @@ def _parse_json_content(data: Dict[str, Any]) -> Dict[str, Set[str]]:
     return {"commits": commits}
 
 
-def _find_and_parse_cve_files(repo_path: Path, cve_id: str) -> Optional[CVEMetadata]:
+def _find_and_parse_cve_files(repo_path: Path, cve_id: str) -> CVEMetadata | None:
     """Finds all relevant files for a CVE and parses them."""
     cve_year = cve_id.split("-")[1]
 
@@ -217,10 +217,10 @@ def _find_and_parse_cve_files(repo_path: Path, cve_id: str) -> Optional[CVEMetad
         logger.warning(f"No files found for {cve_id} in security repo.")
         return None
 
-    all_commits: Set[str] = set()
-    all_files: Set[str] = set()
-    json_data: Optional[Dict[str, Any]] = None
-    mbox_data: Optional[str] = None
+    all_commits: set[str] = set()
+    all_files: set[str] = set()
+    json_data: dict[str, Any] | None = None
+    mbox_data: str | None = None
 
     for file_path in found_files:
         try:

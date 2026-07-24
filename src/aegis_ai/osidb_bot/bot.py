@@ -1,21 +1,20 @@
-from aegis_ai import get_settings
-from aegis_ai.osidb_bot.state import BotPosition, StateFileHandler, StateProxy
-from aegis_ai.osidb_bot.suggest import DEFAULT_SUGGESTION_LIST, _KERNEL_FLAGS_KEY
-from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
-from aegis_ai.data_models import CVEID
-
-from pydantic_ai import Agent
+import asyncio
+import textwrap
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import Any, cast
 
 import osidb_bindings
+import requests
 from osidb_bindings.bindings.python_client.types import Unset
 from osidb_bindings.session import Session
+from pydantic_ai import Agent
 
-import asyncio
-import requests
-import textwrap
-
-from datetime import datetime, timezone
-from typing import Any, Optional, Sequence, cast
+from aegis_ai import get_settings
+from aegis_ai.data_models import CVEID
+from aegis_ai.osidb_bot.state import BotPosition, StateFileHandler, StateProxy
+from aegis_ai.osidb_bot.suggest import _KERNEL_FLAGS_KEY, DEFAULT_SUGGESTION_LIST
+from aegis_ai.osidb_bot.util import FlawData, log_memory, logger
 
 
 class FlawValidationError(RuntimeError):
@@ -115,7 +114,7 @@ class FlawFinder:
     def search(
         self,
         state: BotPosition = BotPosition(),
-        age_cutoff: Optional[datetime] = None,
+        age_cutoff: datetime | None = None,
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
         kwargs: dict[str, Any] = {
@@ -144,7 +143,7 @@ class FlawFinder:
                 kwargs[key] = True
 
         # compute the lower bound on created_dt
-        created_dt_gte: Optional[datetime]
+        created_dt_gte: datetime | None
         if state.created_dt is None:
             created_dt_gte = age_cutoff
         elif age_cutoff is None:
@@ -194,7 +193,7 @@ class FlawUpdater:
     on_failure: Any
 
     # OSIDB flaw from session.flaws.retrieve()
-    flaw_data: Optional[FlawData]
+    flaw_data: FlawData | None
 
     # list of fields updated by the agent
     updated_fields: set[str]
@@ -207,7 +206,7 @@ class FlawUpdater:
         *,
         force: bool = False,
         read_only: bool = False,
-        retry_list: Optional[dict[str, int]] = None,
+        retry_list: dict[str, int] | None = None,
         on_failure: Any = None,
     ):
         self.osidb = osidb
@@ -249,7 +248,7 @@ class FlawUpdater:
         all_ok: bool = True
 
         # query current server time once (before requesting suggestions)
-        timestamp: Optional[datetime] = None
+        timestamp: datetime | None = None
         try:
             timestamp = self.osidb.status().dt
         except Exception:
@@ -257,7 +256,7 @@ class FlawUpdater:
         if timestamp is None or isinstance(timestamp, Unset):
             # use local time for timestamp if server time was not provided
             self._warn("failed to get OSIDB server time, using local time instead")
-            timestamp = datetime.now(tz=timezone.utc)
+            timestamp = datetime.now(tz=UTC)
 
         # requests suggestions sequentially one by one
         for fnc in DEFAULT_SUGGESTION_LIST:
@@ -346,7 +345,7 @@ class FlawUpdater:
             FlawFinder.validate(self.flaw_data)
         except RuntimeError as e:
             if self.force:
-                self._warn(f"bypassing flaw eligibility check: {str(e)}")
+                self._warn(f"bypassing flaw eligibility check: {e!s}")
             else:
                 # proactively remove ineligible CVEs from retry_list
                 self.retry_list.pop(self.cve, None)
@@ -409,7 +408,7 @@ class FlawUpdater:
                     self._info(f"OSIDB response: {truncated}")
 
             # log full exception in debug mode only
-            logger.debug(f"{self.cve}: {str(e)}")
+            logger.debug(f"{self.cve}: {e!s}")
 
         if _KERNEL_FLAGS_KEY in self.updated_fields:
             self._create_labels()
@@ -428,7 +427,7 @@ class Bot(StateProxy):
     osidb: Session
     pending: dict[BotPosition, bool]
     force: bool
-    age_cutoff: Optional[datetime]
+    age_cutoff: datetime | None
     max_retries: int
     retrying_failed: bool
 
@@ -439,7 +438,7 @@ class Bot(StateProxy):
         *,
         force: bool = False,
         read_only: bool = False,
-        age_cutoff: Optional[datetime] = None,
+        age_cutoff: datetime | None = None,
         max_retries: int = 0,
     ):
         super().__init__(state_file_handler, read_only=read_only)
@@ -481,7 +480,7 @@ class Bot(StateProxy):
         return True
 
     async def process_cve(self, cve: CVEID) -> bool:
-        flaw_updater: Optional[FlawUpdater] = None
+        flaw_updater: FlawUpdater | None = None
 
         try:
             flaw_updater = FlawUpdater(
@@ -504,7 +503,7 @@ class Bot(StateProxy):
             # something has failed
             handled_failure = isinstance(e, RuntimeError)
             if handled_failure:
-                logger.warning(f"{cve}: {str(e)}")
+                logger.warning(f"{cve}: {e!s}")
 
             # schedule retry if enabled (but not for validation failures)
             if (
@@ -530,7 +529,7 @@ class Bot(StateProxy):
 
             # determine the next state
             pkeys = self.pending.keys()
-            next_state: Optional[BotPosition] = None
+            next_state: BotPosition | None = None
             for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min):
                 if self.pending[s]:
                     # this CVE is still being processed

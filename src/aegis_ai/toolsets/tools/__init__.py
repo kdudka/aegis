@@ -14,7 +14,7 @@ class BaseToolInput(BaseModel):
 
 class BaseToolOutput(BaseModel):
     status: str = "success"
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @Tool

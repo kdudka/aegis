@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aegis_ai.data_models import cweid_validator, cveid_validator
+from aegis_ai.data_models import cveid_validator, cweid_validator
 
 
 def test_cweid_validator():

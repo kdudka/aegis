@@ -64,7 +64,7 @@ EVAL_CSV = SCRIPT_DIR.parent / "features" / "cve" / "eval-kernel-cves.csv"
 
 
 class _ArtifactConfig:
-    __slots__ = ("subdir", "ext", "url_templates", "min_size")
+    __slots__ = ("ext", "min_size", "subdir", "url_templates")
 
     def __init__(
         self, subdir: str, ext: str, url_templates: list[str], min_size: int

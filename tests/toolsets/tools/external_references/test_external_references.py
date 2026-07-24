@@ -1,12 +1,12 @@
 import pytest
 
 from aegis_ai.toolsets.tools.external_references import (
+    _GITHUB_ALLOWED_PATH_PREFIXES,
+    _GITHUB_REPO_PREFIXES,
     ALLOWED_URL_PREFIXES,
     MAX_CONTENT_LENGTH,
     MAX_READ_BYTES,
     ExternalReferenceResult,
-    _GITHUB_ALLOWED_PATH_PREFIXES,
-    _GITHUB_REPO_PREFIXES,
     _filter_cve_org_json,
     _normalize_cve_org_url,
     _sanitize_pii,

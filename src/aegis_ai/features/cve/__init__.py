@@ -1,36 +1,37 @@
 import asyncio
-import cvss
 import logging
 from typing import Any
 
+import cvss
+
+import aegis_ai.toolsets.tools.osidb as osidb_tool
 from aegis_ai import get_settings
 from aegis_ai.data_models import CVEID
 from aegis_ai.features import Feature
 from aegis_ai.features.cve.data_models import (
     CATEGORY_WEIGHTS,
+    CVEFeatureInput,
     CVSSDiffExplainerModel,
+    PIIReportModel,
     QualityReviewModel,
     RevisedExplanationModel,
     SuggestAffectedComponentsModel,
-    SuggestImpactModel,
     SuggestCWEModel,
-    PIIReportModel,
-    SuggestStatementModel,
     SuggestDescriptionModel,
+    SuggestImpactModel,
+    SuggestStatementModel,
 )
-from aegis_ai.features.cve.data_models import CVEFeatureInput
+from aegis_ai.features.cve.impact_mappings import SEVERITY_ORDER, score_to_band
 from aegis_ai.features.cve.kernel import (
     RULES_KERNEL,
     apply_kpanic_cvss_override,
     check_kernel_output,
     reconcile_kernel,
 )
-from aegis_ai.features.cve.impact_mappings import SEVERITY_ORDER, score_to_band
 from aegis_ai.features.data_models import feature_deps
 from aegis_ai.kernel_classifier import is_kernel_component
 from aegis_ai.prompt import AegisPrompt
 from aegis_ai.toolsets.tools.cwe import cwe_manager
-import aegis_ai.toolsets.tools.osidb as osidb_tool
 
 logger = logging.getLogger(__name__)
 
@@ -413,7 +414,7 @@ class SuggestImpact(Feature):
                 "%s: explanation revised after post-processing adjustments", call_str
             )
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "%s: revision timed out after %ds, keeping original explanation",
                 call_str,

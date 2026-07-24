@@ -6,7 +6,6 @@ al-kernel and the non-kernel LLM self-consistency path.
 
 from types import SimpleNamespace
 
-
 from aegis_ai.features.cve import SuggestImpact
 
 # Shorthand CVSS vectors used across tests.  Only the metrics that matter

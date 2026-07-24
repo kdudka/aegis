@@ -37,7 +37,7 @@ CSV_OUTPUT_PATH = SCRIPT_DIR / "eval-kernel-cves.csv"
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.utils.osidb_cache import read_cache_json  # noqa: E402
+from evals.utils.osidb_cache import read_cache_json
 
 OSIDB_BASE = "https://osidb.prodsec.redhat.com/osidb/api/v2/flaws"
 
@@ -96,7 +96,7 @@ def _refresh_osidb_cache(cve_id: str) -> dict | None:
     """
     import asyncio
 
-    from aegis_ai.toolsets.tools.osidb import cve_retrieve  # noqa: E402
+    from aegis_ai.toolsets.tools.osidb import cve_retrieve
 
     try:
         cve_data = asyncio.run(cve_retrieve(cve_id))
@@ -104,7 +104,7 @@ def _refresh_osidb_cache(cve_id: str) -> dict | None:
         log.warning("cve_retrieve failed for %s: %s", cve_id, exc)
         return None
 
-    from evals.utils.osidb_cache import write_cache_entry  # noqa: E402
+    from evals.utils.osidb_cache import write_cache_entry
 
     write_cache_entry(cve_id, cve_data)
     log.info("  (cache refreshed)")

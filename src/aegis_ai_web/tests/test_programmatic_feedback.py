@@ -1,11 +1,12 @@
 import asyncio
 import csv
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from aegis_ai_web.src.main import app
 from aegis_ai_web.src.data_models import PROGRAMMATIC_FEEDBACK_SCHEMA
+from aegis_ai_web.src.main import app
 
 client = TestClient(app)
 
@@ -320,8 +321,8 @@ async def test_semantic_scoring_success(programmatic_feedback_log_setup):
     Test that process_semantic_scoring updates CSV when scoring succeeds.
     This tests the background task logic directly.
     """
-    from aegis_ai_web.src.main import process_semantic_scoring
     from aegis_ai_web.src.data_models import PROGRAMMATIC_FEEDBACK_SCHEMA
+    from aegis_ai_web.src.main import process_semantic_scoring
 
     # Create a CSV entry that semantic scoring will update
     entry_datetime = "2025-01-15 10:30:45.123"
@@ -742,8 +743,9 @@ class TestScoreWithLlmJudge:
     @patch("aegis_ai_web.src.semantic_scoring.create_llm_judge")
     async def test_success_returns_score_from_dict(self, mock_create_judge):
         """Test that successful scoring extracts score from dict result."""
-        from aegis_ai_web.src.semantic_scoring import _score_with_llm_judge
         from pydantic_evals.evaluators.evaluator import EvaluationReason
+
+        from aegis_ai_web.src.semantic_scoring import _score_with_llm_judge
 
         # Mock the judge to return a dict with EvaluationReason (actual LLMJudge behavior)
         mock_judge = AsyncMock()
@@ -917,8 +919,8 @@ class TestRetryUnscoredEntries:
 
     def test_get_unscored_entries(self, tmp_path, monkeypatch):
         """Test that get_unscored_entries finds entries with empty acceptance_score."""
-        from scripts.retry_failed_scoring import get_unscored_entries
         from aegis_ai_web.src.data_models import PROGRAMMATIC_FEEDBACK_SCHEMA
+        from scripts.retry_failed_scoring import get_unscored_entries
 
         csv_file = tmp_path / "programmatic_feedback.csv"
         monkeypatch.setenv("AEGIS_WEB_PROGRAMMATIC_FEEDBACK_LOG", str(csv_file))
@@ -983,8 +985,8 @@ class TestRetryUnscoredEntries:
         self, mock_semantic_score, tmp_path, monkeypatch
     ):
         """Test that retry_entry updates CSV on success."""
-        from scripts.retry_failed_scoring import retry_entry
         from aegis_ai_web.src.data_models import PROGRAMMATIC_FEEDBACK_SCHEMA
+        from scripts.retry_failed_scoring import retry_entry
 
         csv_file = tmp_path / "programmatic_feedback.csv"
         monkeypatch.setenv("AEGIS_WEB_PROGRAMMATIC_FEEDBACK_LOG", str(csv_file))
@@ -1040,8 +1042,8 @@ class TestRetryUnscoredEntries:
         self, mock_semantic_score, tmp_path, monkeypatch
     ):
         """Test that dry_run mode doesn't modify anything."""
-        from scripts.retry_failed_scoring import retry_entry
         from aegis_ai_web.src.data_models import PROGRAMMATIC_FEEDBACK_SCHEMA
+        from scripts.retry_failed_scoring import retry_entry
 
         csv_file = tmp_path / "programmatic_feedback.csv"
         monkeypatch.setenv("AEGIS_WEB_PROGRAMMATIC_FEEDBACK_LOG", str(csv_file))

@@ -1,7 +1,7 @@
 import logging
+from collections.abc import MutableMapping
 from pathlib import Path
-from typing import Any, MutableMapping
-
+from typing import Any
 
 # Flaw data from OSIDB (nested structures; keys/values are often str but not always)
 FlawData = dict[str, Any]
