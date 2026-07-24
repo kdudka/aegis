@@ -111,6 +111,14 @@ spec:
     type: string
     default: 'false'
     description: When "true", omit the build history (history timestamps, layer metadata, etc.) from the resulting image.
+  - name: git-ref
+    type: string
+    default: ""
+    description: >-
+      Git ref for SARIF upload (e.g. refs/heads/main, refs/pull/42/head).
+      This value is sent as the "ref" field in the GitHub Code Scanning
+      upload payload and determines which ref the results are stored
+      against — results are then queryable per-ref in the Security tab.
   results:
   - description: ""
     name: IMAGE_URL
@@ -504,12 +512,6 @@ spec:
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
-    # Disable KFP (known-false-positives) filtering. The upstream default
-    # (SITE_DEFAULT) expands to an internal CEE GitLab URL that causes a
-    # 60s curl timeout on external Konflux instances. Empty string skips
-    # the probe; the residual "Failed to clone" warning is cosmetic.
-    - name: KFP_GIT_URL
-      value: ""
     runAfter:
     - build-image-index
     taskRef:
@@ -560,9 +562,6 @@ spec:
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: IMP_FINDINGS_ONLY
       value: "false"
-    # See sast-snyk-check comment above for KFP_GIT_URL rationale.
-    - name: KFP_GIT_URL
-      value: ""
     - name: TARGET_DIRS  # avoid scanning .git and .venv
       value: docs,evals,scripts,src,tests
     runAfter:
@@ -591,9 +590,6 @@ spec:
       value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
-    # See sast-snyk-check comment above for KFP_GIT_URL rationale.
-    - name: KFP_GIT_URL
-      value: ""
     runAfter:
     - build-image-index
     taskRef:
@@ -616,6 +612,12 @@ spec:
       value: $(tasks.build-image-index.results.IMAGE_URL)
     - name: image-digest
       value: $(tasks.build-image-index.results.IMAGE_DIGEST)
+    - name: git-url
+      value: $(params.git-url)
+    - name: git-ref
+      value: $(params.git-ref)
+    - name: revision
+      value: $(params.revision)
     runAfter:
     - sast-snyk-check
     - sast-shell-check
@@ -629,11 +631,18 @@ spec:
       description: >-
         Discover SARIF artifacts attached to the built image by the SAST tasks,
         pull them, format findings with csgrep, log a human-readable summary,
-        and fail the pipeline when error-level findings are present.
+        fail the pipeline when error-level findings are present, and upload
+        SARIF results to GitHub Code Scanning.
       params:
       - name: image-url
         type: string
       - name: image-digest
+        type: string
+      - name: git-url
+        type: string
+      - name: git-ref
+        type: string
+      - name: revision
         type: string
       volumes:
       - name: sarif-data
@@ -669,7 +678,6 @@ spec:
           DISCOVER_JSON=$(oras discover --format json "$IMAGE_REF" 2>"$DISCOVER_ERR") || {
             echo "ERROR: oras discover failed."
             cat "$DISCOVER_ERR"
-            rm -f "$DISCOVER_ERR"
             exit 1
           }
           rm -f "$DISCOVER_ERR"
@@ -690,6 +698,7 @@ spec:
             echo "No SARIF artifacts found attached to the image."
             echo "SAST tasks may have been skipped or produced no output."
             echo "0" > "$SARIF_DIR/gate_exit"
+            printf 'TOTAL_ERRORS=0\nTOTAL_WARNINGS=0\nTOTAL_NOTES=0\nPULL_FAILURES=0\n' > "$SARIF_DIR/summary.env"
             exit 0
           fi
 
@@ -701,15 +710,26 @@ spec:
           TOTAL_NOTES=0
           PULL_FAILURES=0
 
+          REF_IDX=0
           while IFS= read -r ref; do
             [ -n "$ref" ] || continue
             echo "------------------------------------------"
             echo "Pulling: ${ref}"
-            if ! oras pull -o "$SARIF_DIR" "$ref" 2>&1; then
+            REF_IDX=$((REF_IDX + 1))
+            PULL_DIR="$SARIF_DIR/ref_${REF_IDX}"
+            mkdir -p "$PULL_DIR"
+            if ! oras pull -o "$PULL_DIR" "$ref" 2>&1; then
               echo "ERROR: Failed to pull ${ref}."
               PULL_FAILURES=$((PULL_FAILURES + 1))
               continue
             fi
+            # Move pulled SARIF files up so all steps see a flat directory.
+            # Prefix with ref index to avoid filename collisions across tasks.
+            for f in "$PULL_DIR"/*; do
+              [ -f "$f" ] || continue
+              mv "$f" "$SARIF_DIR/${REF_IDX}_$(basename "$f")"
+            done
+            rmdir "$PULL_DIR" 2>/dev/null || true
           done <<< "$SARIF_REFS"
 
           for sarif_file in "$SARIF_DIR"/*; do
@@ -737,6 +757,111 @@ spec:
             GATE_EXIT=1
           fi
           echo "$GATE_EXIT" > "$SARIF_DIR/gate_exit"
+      - name: upload-sarif
+        image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:470ce04569ca7219f30dfdccdd282ed4f47201b344b05c67a3497ddcd967e2b3
+        env:
+        - name: GIT_URL
+          value: $(params.git-url)
+        - name: GIT_COMMIT_SHA
+          value: $(params.revision)
+        - name: GIT_REF
+          value: $(params.git-ref)
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: aegis-ai-code-scanning-alerts
+              key: token
+              optional: true
+        script: |
+          #!/bin/bash
+          set -euo pipefail
+
+          SARIF_DIR="/var/workdir/sarif"
+
+          echo "=========================================="
+          echo "GitHub Code Scanning SARIF Upload"
+          echo "=========================================="
+
+          if [ -z "${GIT_COMMIT_SHA:-}" ] || [ -z "${GIT_REF:-}" ]; then
+            echo "Skipping: revision or git-ref not set."
+            exit 0
+          fi
+
+          # GitHub API requires full ref (refs/heads/*, refs/tags/*, refs/pull/*/head).
+          # PaC's {{target_branch}} expands to a bare name for branches (e.g. "main").
+          if [[ "$GIT_REF" != refs/* ]]; then
+            GIT_REF="refs/heads/$GIT_REF"
+          fi
+
+          # GitHub rejects multiple runs with the same category in one SARIF
+          # file, and uploading separate files causes later (empty) uploads to
+          # mark earlier findings as "fixed". Merge all results into one run.
+          MERGED="$SARIF_DIR/merged.sarif.json"
+          FIRST=true
+          for sarif_file in "$SARIF_DIR"/*; do
+            [ -f "$sarif_file" ] || continue
+            jq -e '.runs' "$sarif_file" >/dev/null 2>&1 || continue
+            if $FIRST; then
+              cp "$sarif_file" "$MERGED"
+              FIRST=false
+            else
+              jq -s '
+                .[0].runs[0].results = (
+                  (.[0].runs[0].results // []) +
+                  [.[1].runs[].results // [] | .[]]
+                ) | .[0]
+              ' "$MERGED" "$sarif_file" > "$MERGED.tmp"
+              mv "$MERGED.tmp" "$MERGED"
+            fi
+          done
+
+          if [ "$FIRST" = true ]; then
+            echo "Skipping: no SARIF files to upload."
+            exit 0
+          fi
+
+          RESULT_COUNT=$(jq '[.runs[0].results // [] | .[]] | length' "$MERGED")
+          echo "Merged SARIF: 1 run, ${RESULT_COUNT} result(s)."
+
+          if [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "Skipping: GITHUB_TOKEN not set (aegis-ai-code-scanning-alerts secret may be missing)."
+            exit 0
+          fi
+          TOKEN="$GITHUB_TOKEN"
+
+          REPO_SLUG=$(echo "$GIT_URL" | sed -n 's|.*github\.com[/:]||p' | sed 's|\.git$||' | sed 's|[?#].*||')
+          if [ -z "$REPO_SLUG" ]; then
+            echo "Skipping: could not extract owner/repo from git-url."
+            exit 0
+          fi
+
+          UPLOAD_URL="https://api.github.com/repos/${REPO_SLUG}/code-scanning/sarifs"
+          TMP_PAYLOAD=$(mktemp)
+          TMP_RESP=$(mktemp)
+          # ref determines which Code Scanning "bucket" results appear under
+          gzip -c "$MERGED" | base64 -w0 | \
+            jq -Rs --arg sha "$GIT_COMMIT_SHA" --arg ref "$GIT_REF" \
+              '{commit_sha: $sha, ref: $ref, sarif: .}' > "$TMP_PAYLOAD"
+          set +e
+          HTTP_CODE=$(curl -sS --connect-timeout 10 --max-time 120 \
+            -X POST "$UPLOAD_URL" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d @"$TMP_PAYLOAD" \
+            -o "$TMP_RESP" -w '%{http_code}')
+          RC=$?
+          set -e
+          rm -f "$TMP_PAYLOAD"
+          if [ "$RC" -eq 0 ] && [ "$HTTP_CODE" = "202" ]; then
+            echo "SARIF upload: success (HTTP 202)"
+            cat "$TMP_RESP" 2>/dev/null || true
+          else
+            echo "SARIF upload: failed (HTTP ${HTTP_CODE})"
+            cat "$TMP_RESP" 2>/dev/null || true
+          fi
+          rm -f "$TMP_RESP"
       - name: report
         image: quay.io/konflux-ci/konflux-test:v1.5.4@sha256:dae74bf0d6fc349d3ae140d9e3a921ad5009fdf8dade3186bfd9b65fbe3a365b
         script: |
@@ -757,6 +882,7 @@ spec:
           HAS_FINDINGS=false
           for sarif_file in "$SARIF_DIR"/*; do
             [ -f "$sarif_file" ] || continue
+            [[ "$(basename "$sarif_file")" == merged.sarif.json ]] && continue
             jq -e '.runs' "$sarif_file" >/dev/null 2>&1 || continue
 
             FILENAME=$(basename "$sarif_file")
@@ -772,7 +898,7 @@ spec:
             if [ "$TOTAL_RESULTS" -gt 0 ]; then
               HAS_FINDINGS=true
               echo ""
-              csgrep --mode=sarif "$sarif_file" 2>/dev/null | sed 's/^/  /' || {
+              csgrep "$sarif_file" 2>/dev/null | sed 's/^/  /' || {
                 echo "  (csgrep formatting failed)"
               }
             fi
