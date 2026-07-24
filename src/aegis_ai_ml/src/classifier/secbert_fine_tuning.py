@@ -432,7 +432,7 @@ class SecBERTClassifier:
                 # Retry with even more conservative settings
                 return self._train_with_fallback(train_dataset, val_dataset, output_dir)
             else:
-                raise e
+                raise
 
     def _train_with_fallback(
         self, train_dataset, val_dataset, output_dir="etc/models/secbert_model"
@@ -601,7 +601,7 @@ def main():
     y_true = label_encoder.transform(df_test["impact_clean"])
 
     # Overall evaluation
-    accuracy, report, cm = evaluate_model(y_pred, y_true, impact_labels)
+    accuracy, _report, _cm = evaluate_model(y_pred, y_true, impact_labels)
 
     # Test sample predictions
     print("SAMPLE PREDICTIONS:")

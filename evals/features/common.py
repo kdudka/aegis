@@ -210,7 +210,7 @@ def create_llm_judge(score_name=None, assertion_name=None, **kwargs):
     )
 
 
-def make_eval_reason(value: bool = False, fail_reason: str = None):  # type: ignore
+def make_eval_reason(value: bool = False, fail_reason: str | None = None):
     """construct EvaluationReason object; fail_reason is propagated only if value is False"""
     return EvaluationReason(value=value, reason=(fail_reason if not value else None))
 

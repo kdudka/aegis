@@ -60,7 +60,7 @@ from .semantic_scoring import (
 def log_exception_safely(e: Exception, context: str) -> None:
     """Log exception with warning (no traceback) and debug (with traceback), then raise HTTPException."""
     logging.warning(f"{context}: {e.__class__.__name__}")
-    logging.debug(f"Error details for {context}: {e}", exc_info=True)
+    logging.debug(f"Error details for {context}: {e}", exc_info=True)  # noqa: LOG014
 
 
 class HSTSHeaderMiddleware(BaseHTTPMiddleware):

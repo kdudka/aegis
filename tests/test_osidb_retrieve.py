@@ -119,15 +119,7 @@ def test_load_cve_id_file_json_array(tmp_path: Path) -> None:
 def test_load_cve_id_file_text_lines(tmp_path: Path) -> None:
     cve_ids_path = tmp_path / "cves.txt"
     cve_ids_path.write_text(
-        "\n".join(
-            [
-                "# comment",
-                "",
-                "CVE-2025-1000",
-                "  CVE-2025-1001  ",
-                "CVE-2025-1000",
-            ]
-        )
+        "# comment\n\nCVE-2025-1000\n  CVE-2025-1001  \nCVE-2025-1000"
     )
 
     cve_ids = load_cve_id_file(cve_ids_path)
@@ -300,7 +292,7 @@ def test_incremental_normalization_matches_full_pass() -> None:
         _kernel_flaw("CVE-2025-0010", "IMPORTANT"),  # duplicate
     ]
 
-    full_normalized, full_skipped, full_manual, full_skipped_cves = normalize_flaws(
+    full_normalized, full_skipped, full_manual, _full_skipped_cves = normalize_flaws(
         batch_1 + batch_2, resolver=None, auto_resolve_patches=False
     )
 
@@ -311,7 +303,7 @@ def test_incremental_normalization_matches_full_pass() -> None:
     deduped_batch_2 = [
         f for f in batch_2 if f.get("cve_id") and f["cve_id"] not in seen_cve_ids
     ]
-    inc_norm_2, inc_skip_2, inc_manual_2, inc_skip_cves_2 = normalize_flaws(
+    inc_norm_2, inc_skip_2, inc_manual_2, _inc_skip_cves_2 = normalize_flaws(
         deduped_batch_2, resolver=None, auto_resolve_patches=False
     )
 

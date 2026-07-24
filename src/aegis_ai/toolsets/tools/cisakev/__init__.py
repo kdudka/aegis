@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 cache_dir = pathlib.Path(f"{get_settings().config_dir}/cisakev")
 cache_dir.mkdir(parents=True, exist_ok=True)
 
-CVEID: TypeAlias = str
+type CVEID = str
 JsonBlob = dict[str, Any]
 
 

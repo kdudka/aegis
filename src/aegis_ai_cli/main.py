@@ -5,6 +5,7 @@ aegis cli
 
 import asyncio
 import logging
+import sys
 from datetime import UTC
 
 import click
@@ -59,7 +60,7 @@ def aegis_cli(debug):
     if check_llm_status():
         pass
     else:
-        exit(1)
+        sys.exit(1)
 
 
 @aegis_cli.command()

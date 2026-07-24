@@ -668,7 +668,7 @@ class TestScoreCvssVectors:
         from aegis_ai_web.src.semantic_scoring import _score_cvss_vectors
 
         vector = "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
-        score, reason = _score_cvss_vectors(vector, vector)
+        score, _reason = _score_cvss_vectors(vector, vector)
         assert score == 1.0
 
     def test_different_vectors(self):
@@ -679,7 +679,7 @@ class TestScoreCvssVectors:
         submitted = (
             "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H"  # UI:R instead of UI:N
         )
-        score, reason = _score_cvss_vectors(suggested, submitted)
+        score, _reason = _score_cvss_vectors(suggested, submitted)
         # Should be a valid score less than 1.0
         assert score is not None
         assert 0.0 <= score < 1.0
@@ -779,7 +779,7 @@ class TestCalculateSemanticProximityScore:
         """Test that empty suggested value returns None."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="",
             submitted="some value",
             feature="suggest-title",
@@ -790,7 +790,7 @@ class TestCalculateSemanticProximityScore:
         """Test that empty submitted value returns None."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="some value",
             submitted="",
             feature="suggest-title",
@@ -801,7 +801,7 @@ class TestCalculateSemanticProximityScore:
         """Test that unsupported features return None."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="value",
             submitted="value",
             feature="unsupported-feature",
@@ -812,7 +812,7 @@ class TestCalculateSemanticProximityScore:
         """Test CWE scoring with valid JSON."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["CWE-79"]',
             submitted='["CWE-79"]',
             feature="suggest-cwe",
@@ -823,7 +823,7 @@ class TestCalculateSemanticProximityScore:
         """Test CWE scoring with malformed JSON returns None."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["CWE-79"]',
             submitted="not-json",
             feature="suggest-cwe",
@@ -835,7 +835,7 @@ class TestCalculateSemanticProximityScore:
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
         # Simple severity strings are not CVSS vectors, should return None
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="CRITICAL",
             submitted="HIGH",
             feature="suggest-impact",
@@ -846,7 +846,7 @@ class TestCalculateSemanticProximityScore:
         """Test impact scoring with valid CVSS vectors."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             submitted="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             feature="suggest-impact",
@@ -858,7 +858,7 @@ class TestCalculateSemanticProximityScore:
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
         # suggest-cvss should work the same as suggest-impact for CVSS vectors
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
             submitted="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:L",
             feature="suggest-cvss",
@@ -872,7 +872,7 @@ class TestCalculateSemanticProximityScore:
         """Test component list scoring with exact match."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["kernel"]',
             submitted='["kernel"]',
             feature="suggest-affected-components",
@@ -883,7 +883,7 @@ class TestCalculateSemanticProximityScore:
         """Test component list scoring with partial overlap."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["kernel", "linux-kernel"]',
             submitted='["kernel"]',
             feature="suggest-affected-components",
@@ -895,7 +895,7 @@ class TestCalculateSemanticProximityScore:
         """Test component list scoring with no overlap."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["kernel"]',
             submitted='["curl"]',
             feature="suggest-affected-components",
@@ -906,7 +906,7 @@ class TestCalculateSemanticProximityScore:
         """Test component list scoring with malformed JSON returns None."""
         from aegis_ai_web.src.semantic_scoring import calculate_semantic_proximity_score
 
-        score, explanation = await calculate_semantic_proximity_score(
+        score, _explanation = await calculate_semantic_proximity_score(
             suggested='["kernel"]',
             submitted="not-json",
             feature="suggest-affected-components",

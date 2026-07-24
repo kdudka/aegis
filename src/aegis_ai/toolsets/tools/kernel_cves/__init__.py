@@ -242,9 +242,9 @@ def _find_and_parse_cve_files(repo_path: Path, cve_id: str) -> CVEMetadata | Non
         cve_id=cve_id,
         source_files=[str(p) for p in found_files],
         commit_hashes=[
-            f"https://git.kernel.org/stable/c/{h}" for h in sorted(list(all_commits))
+            f"https://git.kernel.org/stable/c/{h}" for h in sorted(all_commits)
         ],
-        affected_files=sorted(list(all_files)),
+        affected_files=sorted(all_files),
         json_data=json_data,
         mbox_data=mbox_data,
         scraped_at=time.time(),

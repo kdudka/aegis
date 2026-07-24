@@ -501,7 +501,7 @@ class SuggestImpact(Feature):
             output_schema=output_schema,
         )
 
-        run_kwargs: dict = dict(deps=deps, output_type=SuggestImpactModel)
+        run_kwargs: dict = {"deps": deps, "output_type": SuggestImpactModel}
 
         if is_kernel:
             from aegis_ai.toolsets import kernel_extra_toolset
@@ -550,7 +550,7 @@ class SuggestImpact(Feature):
         if classifier_result and isinstance(classifier_result, dict):
             active = classifier_result.get("active_features", [])
             result.output._flags = sorted(
-                set(_FLAG_TO_LABEL[f] for f in active if f in _FLAG_TO_LABEL)
+                {_FLAG_TO_LABEL[f] for f in active if f in _FLAG_TO_LABEL}
             )
 
         return result
@@ -594,7 +594,7 @@ class SuggestCWE(Feature):
             output_schema=SuggestCWEModel.model_json_schema(),
         )
 
-        run_kwargs: dict = dict(deps=deps, output_type=SuggestCWEModel)
+        run_kwargs: dict = {"deps": deps, "output_type": SuggestCWEModel}
         result = await self.guarded_run(prompt, **run_kwargs)
         # Post-process: filter out any disallowed CWE IDs (guardrail in case LLM misses rules)
         await cwe_manager.initialize()

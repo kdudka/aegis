@@ -244,7 +244,7 @@ def test_split_records_singleton_stratum_goes_to_train() -> None:
         },
     ]
 
-    train, test, _report = split_records_by_severity(records, test_ratio=0.25, seed=42)
+    train, _test, _report = split_records_by_severity(records, test_ratio=0.25, seed=42)
 
     train_ids = {r["cve_id"] for r in train}
     assert "CVE-2024-0001" in train_ids

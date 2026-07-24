@@ -253,9 +253,9 @@ class SuggestImpactCase(Case):
         )
 
         # enable field-specific evaluators for this case
-        evaluators: list[Evaluator] = list(
+        evaluators: list[Evaluator] = [
             field_evaluators[f] for f in field_evaluators if getattr(expected_output, f)
-        )
+        ]
 
         if data_quality is not None:
             evaluators.append(DataQualityEvaluator())

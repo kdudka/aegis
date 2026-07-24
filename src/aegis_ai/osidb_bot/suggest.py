@@ -143,7 +143,7 @@ def update_field(
         explanation=output.explanation,
     )
 
-    return set([dst])
+    return {dst}
 
 
 async def suggest_components(

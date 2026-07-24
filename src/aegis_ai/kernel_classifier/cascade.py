@@ -164,11 +164,13 @@ def apply_cascade(
         severity = 1
 
     # R6: LOW → MODERATE when CVSS indicates meaningful severity
-    if has_cvss and severity == 2:
-        if (
-            (cvss_score >= 6.7) or (cvss_score >= 5.5 and cia_hhh)
-        ) and not has_contained:
-            severity = 1
+    if (
+        has_cvss
+        and severity == 2
+        and ((cvss_score >= 6.7) or (cvss_score >= 5.5 and cia_hhh))
+        and not has_contained
+    ):
+        severity = 1
 
     # --- Escalation: MODERATE → IMPORTANT ---
 
@@ -191,11 +193,15 @@ def apply_cascade(
         severity = 0
 
     # R12: MODERATE → IMPORTANT when kernel crash is reachable via network path
-    if severity == 1 and has_kpanic:
-        if "servertoclientfail" in patch_flags or (
-            "remote" in patch_flags and "danger" in patch_flags
-        ):
-            severity = 0
+    if (
+        severity == 1
+        and has_kpanic
+        and (
+            "servertoclientfail" in patch_flags
+            or ("remote" in patch_flags and "danger" in patch_flags)
+        )
+    ):
+        severity = 0
 
     # --- De-escalation: MODERATE → LOW ---
 

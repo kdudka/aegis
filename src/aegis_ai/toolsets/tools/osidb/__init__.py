@@ -171,9 +171,9 @@ def cve_exclude_fields(
 ):
     """return a CVE object with data removed in fields specified by exclude_fields"""
     # "cve_description" is used in OSIM, "description" is used in OSIDB
-    fields_to_exclude = set(
-        [field.replace("cve_description", "description") for field in exclude_fields]
-    )
+    fields_to_exclude = {
+        field.replace("cve_description", "description") for field in exclude_fields
+    }
 
     # create a local copy so that we can change the CVE object
     cve = cve.model_copy()
