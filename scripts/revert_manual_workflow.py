@@ -154,7 +154,9 @@ def process_cve(
 
     workflow = flaw_data.get("classification", {}).get("workflow", "")
     if workflow != "MANUAL":
-        logger.warning("%s: skipped because workflow=%r, expected MANUAL", cve_id, workflow)
+        logger.warning(
+            "%s: skipped because workflow=%r, expected MANUAL", cve_id, workflow
+        )
         return "skipped"
 
     try:
