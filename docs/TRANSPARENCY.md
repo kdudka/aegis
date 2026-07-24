@@ -161,7 +161,6 @@ public_feature_agent = create_aegis_agent(
     retries=agent_default_max_retries,
     toolsets=[public_cve_toolset, public_toolset],
 )
-
 ```
 
 ### Prompt-Guided Tool Selection
@@ -171,7 +170,7 @@ The `AegisPrompt` class includes `rules` that guide the agent on which tools to 
 **Example: SuggestCWE Feature rules:**
 
 ```python
-rules="""
+rules = """
     - When CVE component is kernel always use kernel_cve tool to retrieve additional context.
     - Retrieve and summarise additional context strictly from vulnerability reference URLs and CWE tool outputs.
         - Prefer mitre_cwe tools (retrieve_allowed_cwe_ids, search_cwes, retrieve_cwes) for CWE selection and definitions.
