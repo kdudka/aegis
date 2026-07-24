@@ -63,6 +63,12 @@ source = "vcs"
 [tool.hatch.build.hooks.vcs]
 version-file = "src/aegis_ai/_version.py"
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",    # blind `except Exception` (intentional resilience pattern)
+    "LOG015",    # root logger usage
+]
+
 [tool.ty.environment]
 # match pytest's `pythonpath = ["."]` so ty can resolve `tests.*` imports
 extra-paths = ["."]
