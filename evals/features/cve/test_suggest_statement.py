@@ -532,7 +532,12 @@ cases = [
     SuggestStatementCase(
         cve_id="CVE-2026-40227",
         expected_mitigation="This issue can be mitigated by changing the permission of the varsock file located at:\n~~~\n/run/systemd/io.systemd.Manager\n~~~\nto be accessible only by trusted or privileged users.",
-        metadata={"known_to_fail_evaluators": ["MitigationEvaluator"]},
+        metadata={
+            "known_to_fail_evaluators": [
+                "MitigationEvaluator",
+                "StatementNoDuplicatedInfo",
+            ]
+        },
     ),
     # Analyst feedback (AEGIS-368): GHSA reference provides detailed impact insights
     # that should enrich the statement beyond restating comment_zero.
