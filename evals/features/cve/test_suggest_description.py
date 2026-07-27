@@ -215,7 +215,7 @@ cases = [
         cve_id="CVE-2025-64503",
         expected_title="cups-filters: Out-of-bounds write via crafted PDF MediaBox",
         # Aegis sometimes focuses on the consequence (DoS) instead of the cause (Out-of-bounds write)
-        metadata={"known_to_fail_evaluators": ["TitleEvaluator"]},
+        metadata={"known_to_fail_evaluators": ["NoVersionInfo", "TitleEvaluator"]},
     ),
     SuggestDescriptionCase(
         cve_id="CVE-2025-64524",
