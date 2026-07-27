@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-07-28
+
+### Changed
+- `osidb-bot` tool call logging is now less verbose [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+- relaxed the validation regex for CVE IDs [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+
+### Added
+- `osidb-bot` now retries failed CVEs with configurable `--max-retries` and labels last-retry failures as `manual-triage` [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+- `osidb-bot` now records `tools_used` in `aegis_meta` entries [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+- added multi-feature CVE analysis endpoint to the REST API [\[AEGIS-456\]](https://redhat.atlassian.net/browse/AEGIS-456)
+- REST API now accepts user-provided CVE data for analysis of external (non-OSIDB) CVEs with per-request agent selection [\[AEGIS-431\]](https://redhat.atlassian.net/browse/AEGIS-431)
+- added `make generate-openapi` and `make check-openapi` targets for OpenAPI doc generation and CI validation [\[AEGIS-431\]](https://redhat.atlassian.net/browse/AEGIS-431)
+- added `KpanicOverestimationEvaluator` for kernel CVE impact evaluations [\[AEGIS-441\]](https://redhat.atlassian.net/browse/AEGIS-441)
+- evaluation suite now reports per-evaluator assertion rates and fails when average score is below threshold [\[AEGIS-441\]](https://redhat.atlassian.net/browse/AEGIS-441)
+- evaluation suite now exports cache-miss fixtures for offline import from CI logs [\[AEGIS-431\]](https://redhat.atlassian.net/browse/AEGIS-431)
+- added evaluation cases for `SuggestImpact` [\[AEGIS-461\]](https://redhat.atlassian.net/browse/AEGIS-461)
+- `external_references_tool` now allows Grafana security advisories and GitHub repos [\[AEGIS-461\]](https://redhat.atlassian.net/browse/AEGIS-461)
+- added `revert_manual_workflow.py` script with `--jobs` option for concurrent CVE processing [\[AEGIS-475\]](https://redhat.atlassian.net/browse/AEGIS-475)
+
+### Fixed
+- `osidb-bot` now catches all unhandled exceptions per CVE and skips label creation in read-only mode [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+- `osidb-bot` now deduplicates `workflow_state_in` in `FlawFinder.search()`
+- `osidb-bot` now logs the number of actually processed CVEs [\[AEGIS-462\]](https://redhat.atlassian.net/browse/AEGIS-462)
+- `suggest-cwe` prompt now distinguishes similar-sounding CWE weaknesses [\[AEGIS-431\]](https://redhat.atlassian.net/browse/AEGIS-431)
+- `suggest-impact` now provides more accurate CVSS suggestions for SSRF and path-traversal flaws [\[AEGIS-461\]](https://redhat.atlassian.net/browse/AEGIS-461)
+- `suggest-impact` now falls back to OSIDB when web API static context is insufficient [\[AEGIS-456\]](https://redhat.atlassian.net/browse/AEGIS-456)
+- `tools_used` is now correctly populated from pydantic-ai message history [\[AEGIS-431\]](https://redhat.atlassian.net/browse/AEGIS-431)
+
+
 ## [0.7.6] - 2026-07-13
 
 ### Changed
