@@ -259,6 +259,11 @@ class TestBuildCveInput:
         assert result.affects == [{"ps_module": "rhel-9"}]
         assert result.cvss_scores is not None and len(result.cvss_scores) == 1
 
+    def test_comments_accepts_string(self):
+        ctx = {"comments": "Additional context."}
+        result = cve._build_cve_input("CVE-2025-1234", ctx)
+        assert result.comments == "Additional context."
+
     def test_description_fallback_to_cve_description(self):
         ctx = {"cve_description": "NVD description text."}
         result = cve._build_cve_input("CVE-2025-1234", ctx)

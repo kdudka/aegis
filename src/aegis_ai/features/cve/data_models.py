@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import Field, BaseModel, PrivateAttr, model_validator
 
@@ -15,7 +15,9 @@ class CVEFeatureInput(BaseModel):
     statement: Optional[str] = Field(None, description="CVE statement")
     mitigation: Optional[str] = Field(None, description="CVE mitigation")
     comment_zero: Optional[str] = Field(None, description="CVE comment_zero")
-    comments: Optional[List] = Field(None, description="All public comments")
+    comments: Optional[Union[List, str]] = Field(
+        None, description="All public comments"
+    )
     components: Optional[List] = Field(None, description="List of components")
     references: Optional[List] = Field(None, description="List of references")
     affects: Optional[List] = Field(None, description="List of affects")
