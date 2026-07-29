@@ -15,6 +15,9 @@ cache_lock = asyncio.Lock()
 
 cache_misses: list[str] = []
 
+# per-vuln in-flight tasks so concurrent misses for the same ID fetch only once
+_inflight: dict[str, asyncio.Task[dict[str, Any]]] = {}
+
 
 def write_ghsa_cache_entry(vuln_id: str, data: dict[str, Any]) -> Path:
     """Serialize a raw OSV.dev response to the GHSA cache."""
@@ -22,6 +25,18 @@ def write_ghsa_cache_entry(vuln_id: str, data: dict[str, Any]) -> Path:
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
     return cache_file
+
+
+async def _do_fetch(vuln_id: str) -> dict[str, Any]:
+    """Fetch a single vulnerability from OSV.dev and write the result to cache."""
+    data = await asyncio.to_thread(OSVClient().get_vuln_by_id, vuln_id)
+
+    async with cache_lock:
+        path = write_ghsa_cache_entry(vuln_id, data)
+        logger.info('writing GHSA data cache to "%s"', path)
+        cache_misses.append(vuln_id)
+
+    return data
 
 
 async def ghsa_cache_retrieve(vuln_id: str) -> dict[str, Any]:
@@ -34,16 +49,20 @@ async def ghsa_cache_retrieve(vuln_id: str) -> dict[str, Any]:
             with open(cache_file, "r") as f:  # noqa: ASYNC230
                 data: dict[str, Any] = json.load(f)
             logger.debug('read GHSA data from "%s"', cache_file)
-
+            return data
         except OSError:
-            client = OSVClient()
-            data = client.get_vuln_by_id(vuln_id)
+            pass
 
-            path = write_ghsa_cache_entry(vuln_id, data)
-            logger.info('writing GHSA data cache to "%s"', path)
-            cache_misses.append(vuln_id)
+        # coalesce concurrent misses for the same vuln into a single fetch
+        task = _inflight.get(vuln_id)
+        if task is None:
+            task = asyncio.create_task(_do_fetch(vuln_id))
+            _inflight[vuln_id] = task
 
-    return data
+    try:
+        return await task
+    finally:
+        _inflight.pop(vuln_id, None)
 
 
 def write_misses_report() -> Path | None:

@@ -19,6 +19,9 @@ cache_lock = asyncio.Lock()
 
 cache_misses: list[str] = []
 
+# per-CVE in-flight tasks so concurrent misses for the same CVE fetch only once
+_inflight: dict[str, asyncio.Task[CVE]] = {}
+
 
 def write_cache_entry(
     cve_id: str, cve_data: CVE, *, include_affects: bool = False
@@ -47,12 +50,24 @@ def read_cache_json(cve_id: str) -> dict[str, Any] | None:
         return None
 
 
+async def _do_fetch(cve_id: CVEID) -> CVE:
+    """Fetch a single CVE from OSIDB and write the result to cache."""
+    cve_data = await cve_retrieve(cve_id)
+
+    async with cache_lock:
+        path = write_cache_entry(str(cve_id), cve_data)
+        logger.info('writing CVE data cache to "%s"', path)
+        cache_misses.append(str(cve_id))
+
+    return cve_data
+
+
 async def osidb_cache_retrieve(cve_id: CVEID) -> CVE:
     """Return cached CVE data if available.  If not, retrieve CVE data
     from OSIDB and store them to cache for subsequent runs."""
     cache_file = Path(OSIDB_CACHE_DIR, f"{cve_id}.json")
+    key = str(cve_id)
 
-    # acquire global mutex to access OSIDB_CACHE_DIR
     async with cache_lock:
         try:
             # check whether the CVE data is cached already
@@ -62,16 +77,20 @@ async def osidb_cache_retrieve(cve_id: CVEID) -> CVE:
             # try to load data from the existing JSON file
             cve_data = CVE.model_validate_json(json_data)
             logger.debug(f'read CVE data from "{cache_file}"')
-
+            return cve_data
         except OSError:
-            # cached CVE data not available -> query OSIDB
-            cve_data = await cve_retrieve(cve_id)
+            pass
 
-            path = write_cache_entry(str(cve_id), cve_data)
-            logger.info('writing CVE data cache to "%s"', path)
-            cache_misses.append(str(cve_id))
+        # coalesce concurrent misses for the same CVE into a single fetch
+        task = _inflight.get(key)
+        if task is None:
+            task = asyncio.create_task(_do_fetch(cve_id))
+            _inflight[key] = task
 
-    return cve_data
+    try:
+        return await task
+    finally:
+        _inflight.pop(key, None)
 
 
 def write_misses_report() -> Path | None:
