@@ -324,7 +324,7 @@ class _HTMLTextExtractor(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in self._SKIP_TAGS:
             self._skip_depth += 1
-        elif tag in ("br", "p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"):
+        elif tag in ("br", "p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr"):  # noqa: SIM102
             if self._skip_depth == 0:
                 self._parts.append("\n")
 

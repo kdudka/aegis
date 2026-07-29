@@ -66,7 +66,7 @@ def _query_osidb(cve_id: str) -> dict | None:
     """Query OSIDB for a single flaw. Returns the JSON dict or None."""
     url = f"{OSIDB_BASE}/{cve_id}?include_fields=cve_id,impact,cvss_scores"
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: PLW1510
             ["curl", "-s", "--negotiate", "-u", ":", url],
             capture_output=True,
             text=True,
@@ -165,7 +165,7 @@ def _pick_best_cvss3(cvss_scores: list[dict]) -> tuple[float | None, str]:
             best_score = cvss_lib.CVSS3(vector).scores()[0]
             best_vector = vector
             best_priority = priority
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     return best_score, best_vector

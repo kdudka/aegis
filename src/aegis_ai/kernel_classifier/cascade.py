@@ -210,7 +210,7 @@ def apply_cascade(
         severity = 2
 
     # R8: MODERATE → LOW when CVSS is low-moderate with local/low-impact vector
-    if has_cvss and severity == 1 and cvss_score < 5.5 and not has_kpanic:
+    if has_cvss and severity == 1 and cvss_score < 5.5 and not has_kpanic:  # noqa: SIM102
         if vec.get("AV") == "L" and not cia_hhh:
             c = vec.get("C", "")
             i = vec.get("I", "")

@@ -42,7 +42,7 @@ async def extref_cache_retrieve(url: str) -> ExternalReferenceResult:
 
     async with cache_lock:
         try:
-            with open(cache_file) as f:
+            with open(cache_file) as f:  # noqa: ASYNC230
                 data: dict[str, Any] = json.load(f)
             logger.debug('read external reference cache from "%s"', cache_file)
             return ExternalReferenceResult(**data["result"])

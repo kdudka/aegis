@@ -556,7 +556,7 @@ class TestCveMultiAnalysis:
             captured_contexts.append(static_context or {})
             return _make_mock_result(_make_sac_output())
 
-        with _patch_all_cve_feature_execs(_make_mock_result(_make_sac_output())):
+        with _patch_all_cve_feature_execs(_make_mock_result(_make_sac_output())):  # noqa: SIM117
             with patch.object(
                 cve_features.SuggestAffectedComponents,
                 "exec",

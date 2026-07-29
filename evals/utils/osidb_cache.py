@@ -56,7 +56,7 @@ async def osidb_cache_retrieve(cve_id: CVEID) -> CVE:
     async with cache_lock:
         try:
             # check whether the CVE data is cached already
-            with open(cache_file, "r") as f:
+            with open(cache_file, "r") as f:  # noqa: ASYNC230
                 json_data = f.read()
 
             # try to load data from the existing JSON file

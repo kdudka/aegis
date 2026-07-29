@@ -98,7 +98,7 @@ class FeedbackLogger:
         # Add datetime and version fields if not already present
         row_data = feedback_data.copy()
         if "datetime" not in row_data:
-            row_data["datetime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            row_data["datetime"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # noqa: DTZ005
         if "version" not in row_data:
             row_data["version"] = __version__
 

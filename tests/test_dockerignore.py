@@ -6,7 +6,7 @@ import pytest
 
 def _git_tracked_files() -> list[str]:
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: PLW1510
             ["git", "ls-files"],
             capture_output=True,
             text=True,

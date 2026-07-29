@@ -72,7 +72,7 @@ class CVEMetadata(BaseModel):
 
 
 class LINUXCVEToolResponse(BaseToolOutput):
-    """"""
+    """"""  # noqa: D419
 
     cve_id: CVEID = Field(
         ...,
@@ -257,7 +257,7 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
     and parsing the relevant files for context.
     """
     try:
-        subprocess.run(["git", "--version"], check=True, capture_output=True)
+        subprocess.run(["git", "--version"], check=True, capture_output=True)  # noqa: ASYNC221
     except (subprocess.CalledProcessError, FileNotFoundError):
         logger.warning("git is not installed or not in PATH. This tool cannot run.")
         return LINUXCVEToolResponse.error(cve_id, "Failed to run tool.")

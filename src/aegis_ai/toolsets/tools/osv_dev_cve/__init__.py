@@ -162,7 +162,7 @@ class OSVClient:
 
 
 async def osv_vulnerability_lookup(cve_id: CVEID):
-    """ """
+    """ """  # noqa: D419
     client = OSVClient()
     return client.get_vuln_by_id(cve_id)
 

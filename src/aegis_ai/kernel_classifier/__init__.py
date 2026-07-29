@@ -485,7 +485,7 @@ class KernelImpactClassifier:
                             fetched = True
                             used_template = tmpl
                             break
-                    except Exception:
+                    except Exception:  # noqa: S112
                         continue
                 if not fetched:
                     logger.warning(
@@ -536,7 +536,7 @@ class KernelImpactClassifier:
                             logger.debug("Fetched commit HTML for %s", commit_hash[:12])
                             fetched = True
                             break
-                    except Exception:
+                    except Exception:  # noqa: S112
                         continue
                 if not fetched:
                     logger.warning(

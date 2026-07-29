@@ -251,7 +251,7 @@ class FlawUpdater:
         timestamp: datetime | None = None
         try:
             timestamp = self.osidb.status().dt
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         if timestamp is None or isinstance(timestamp, Unset):
             # use local time for timestamp if server time was not provided
@@ -530,7 +530,7 @@ class Bot(StateProxy):
             # determine the next state
             pkeys = self.pending.keys()
             next_state: BotPosition | None = None
-            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min(tz=UTC)):
+            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min):  # noqa: DTZ901
                 if self.pending[s]:
                     # this CVE is still being processed
                     break

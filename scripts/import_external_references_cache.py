@@ -34,7 +34,7 @@ async def main():
 
     config_logging(level="INFO")
 
-    with open(sys.argv[1]) as f:
+    with open(sys.argv[1]) as f:  # noqa: ASYNC230
         cve_ids = [line.strip() for line in f if line.strip()]
 
     urls_to_fetch: list[str] = []
@@ -45,7 +45,7 @@ async def main():
         if not osidb_file.exists():
             skipped_cves.append(cve_id)
             continue
-        with open(osidb_file) as f:
+        with open(osidb_file) as f:  # noqa: ASYNC230
             data = json.load(f)
         for ref in data.get("references", []):
             url = ref.get("url", "")

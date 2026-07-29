@@ -199,7 +199,7 @@ class TestH8:
             cvss_vector="CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:H",
         )
         SuggestImpact.reconcile_severity(out, "t", _clf(impact="MODERATE"))
-        assert out.impact != "LOW" or "H8" not in ""
+        assert out.impact != "LOW" or "H8" not in ""  # noqa: PLR0133
 
     def test_hhh_does_not_fire(self):
         out = _output(impact="MODERATE", cvss_score="4.0", cvss_vector=_VEC_LOCAL_HHH)

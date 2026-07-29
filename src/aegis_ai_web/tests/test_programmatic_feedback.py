@@ -329,7 +329,7 @@ async def test_semantic_scoring_success(programmatic_feedback_log_setup):
     cve_id = "CVE-2025-23395"
     feature = "suggest-title"
 
-    with open(programmatic_feedback_log_setup, "w", newline="", encoding="utf-8") as f:
+    with open(programmatic_feedback_log_setup, "w", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
         writer = csv.DictWriter(f, fieldnames=PROGRAMMATIC_FEEDBACK_SCHEMA.field_names)
         writer.writeheader()
         writer.writerow(
@@ -365,7 +365,7 @@ async def test_semantic_scoring_success(programmatic_feedback_log_setup):
     assert result == 0.75
 
     # Verify the score was updated in the CSV
-    with open(programmatic_feedback_log_setup, "r", newline="", encoding="utf-8") as f:
+    with open(programmatic_feedback_log_setup, "r", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
         reader = csv.DictReader(f)
         rows = list(reader)
         last_row = rows[-1]
@@ -995,7 +995,7 @@ class TestRetryUnscoredEntries:
         cve_id = "CVE-2025-0001"
         feature = "suggest-title"
 
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
             writer = csv.DictWriter(
                 f, fieldnames=PROGRAMMATIC_FEEDBACK_SCHEMA.field_names
             )
@@ -1028,7 +1028,7 @@ class TestRetryUnscoredEntries:
         assert success is True
 
         # Verify CSV was updated
-        with open(csv_file, "r", newline="", encoding="utf-8") as f:
+        with open(csv_file, "r", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
             reader = csv.DictReader(f)
             rows = list(reader)
             assert rows[0]["acceptance_score"] == "0.85"
@@ -1050,7 +1050,7 @@ class TestRetryUnscoredEntries:
 
         datetime_str = "2025-01-15 10:30:45.123"
 
-        with open(csv_file, "w", newline="", encoding="utf-8") as f:
+        with open(csv_file, "w", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
             writer = csv.DictWriter(
                 f, fieldnames=PROGRAMMATIC_FEEDBACK_SCHEMA.field_names
             )
@@ -1083,7 +1083,7 @@ class TestRetryUnscoredEntries:
         assert success is True
 
         # Verify CSV was NOT updated (dry run)
-        with open(csv_file, "r", newline="", encoding="utf-8") as f:
+        with open(csv_file, "r", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
             reader = csv.DictReader(f)
             rows = list(reader)
             assert rows[0]["acceptance_score"] == ""

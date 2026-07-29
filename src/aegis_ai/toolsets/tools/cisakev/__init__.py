@@ -36,7 +36,7 @@ class CISAToolInput(BaseToolInput):
 
 
 class CISAToolResponse(BaseToolOutput):
-    """"""
+    """"""  # noqa: D419
 
     cve_id: CVEID = Field(
         ...,

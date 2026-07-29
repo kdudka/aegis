@@ -26,12 +26,12 @@ class SortOrder(str, Enum):
 def _parse_datetime_str(dt_str: str) -> datetime:
     """Parse datetime string to datetime object for sorting."""
     try:
-        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f")
+        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f")  # noqa: DTZ007
     except ValueError:
         try:
-            return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+            return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
         except ValueError:
-            return datetime.fromtimestamp(0)
+            return datetime.fromtimestamp(0)  # noqa: DTZ006
 
 
 def _standard_entry_to_kpi(entry: dict[str, Any]) -> KPIEntry:
@@ -145,7 +145,7 @@ def get_cve_kpi(
         try:
             return _get_all_features_kpi(order)
         except Exception:
-            logging.error(
+            logging.error(  # noqa: G201
                 "Error retrieving KPI data for all features",
                 exc_info=True,
             )
@@ -174,7 +174,7 @@ def get_cve_kpi(
         return {feature: _compute_kpi(entries, order)}
 
     except Exception:
-        logging.error(
+        logging.error(  # noqa: G201
             f"Error retrieving KPI data for feature '{feature}'",
             exc_info=True,
         )

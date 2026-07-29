@@ -188,7 +188,7 @@ async def test_submit_feedback_after_suggest_impact_analysis(feedback_log_setup)
 
     # Step 3: Verify the feedback was logged correctly
     try:
-        with open(feedback_log_setup, "r", newline="", encoding="utf-8") as f:
+        with open(feedback_log_setup, "r", newline="", encoding="utf-8") as f:  # noqa: ASYNC230
             reader = csv.DictReader(f)
             rows = list(reader)
             assert len(rows) > 0, "No rows found in feedback log"

@@ -218,7 +218,7 @@ class SuggestImpact(Feature):
         output.impact = final
         return trace
 
-    _BAND_SCORE_FLOOR: dict[str, float] = {
+    _BAND_SCORE_FLOOR: dict[str, float] = {  # noqa: RUF012
         "CRITICAL": 9.1,
         "IMPORTANT": 7.1,
         "MODERATE": 4.0,
@@ -864,9 +864,9 @@ class CVSSDiffExplainer(Feature):
 class QualityReview(Feature):
     """Score CVE flaw content against a weighted quality rubric (0.0-1.0 scale) evaluated through a Customer Lens framework."""
 
-    _REQUIRED_CATEGORIES = set(CATEGORY_WEIGHTS.keys())
+    _REQUIRED_CATEGORIES = set(CATEGORY_WEIGHTS.keys())  # noqa: RUF012
 
-    _REQUIRED_CRITERIA: set[str] = {
+    _REQUIRED_CRITERIA: set[str] = {  # noqa: RUF012
         # Description - Technical Clarity
         "component_location",
         "vuln_type_mechanics",

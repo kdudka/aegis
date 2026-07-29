@@ -20,7 +20,7 @@ class BaseToolOutput(BaseModel):
 async def date_tool(ctx: RunContext) -> str:
     """Returns the current date."""
     logger.info("calling date_lookup")
-    today = date.today()
+    today = date.today()  # noqa: DTZ011
     return str(today)
 
 

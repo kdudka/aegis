@@ -728,7 +728,7 @@ async def cve_kpi(
         description="Feature name to filter entries by. Valid values include: 'suggest-impact', 'suggest-cwe', 'suggest-description', 'suggest-statement', 'identify-pii', 'cvss-diff-explainer', or 'all' to get KPIs for all features.",
         examples=["suggest-impact", "suggest-cwe", "suggest-description", "all"],
     ),
-    order: SortOrder = Query(
+    order: SortOrder = Query(  # noqa: B008
         default=SortOrder.ASC,
         description="Sort order for datetime field. Must be 'asc' (ascending, oldest first) or 'desc' (descending, newest first). Defaults to 'asc'.",
         examples=["asc", "desc"],
@@ -943,7 +943,7 @@ async def save_programmatic_feedback(request: Request, feedback: ProgrammaticFee
         log_email_mismatch(request, email)
 
         # Generate datetime once at the start to ensure consistency
-        entry_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        entry_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # noqa: DTZ005
 
         # Calculate exact match score (fallback)
         acceptance_score = calculate_acceptance_score(suggested, submitted)

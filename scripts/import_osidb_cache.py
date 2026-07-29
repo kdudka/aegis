@@ -17,7 +17,7 @@ async def main():
 
     config_logging(level="INFO")
 
-    with open(sys.argv[1]) as f:
+    with open(sys.argv[1]) as f:  # noqa: ASYNC230
         cve_ids = [line.strip() for line in f if line.strip()]
 
     total = len(cve_ids)

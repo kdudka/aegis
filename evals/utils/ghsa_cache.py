@@ -31,7 +31,7 @@ async def ghsa_cache_retrieve(vuln_id: str) -> dict[str, Any]:
 
     async with cache_lock:
         try:
-            with open(cache_file, "r") as f:
+            with open(cache_file, "r") as f:  # noqa: ASYNC230
                 data: dict[str, Any] = json.load(f)
             logger.debug('read GHSA data from "%s"', cache_file)
 
