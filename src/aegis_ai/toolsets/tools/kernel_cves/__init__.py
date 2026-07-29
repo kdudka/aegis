@@ -1,5 +1,6 @@
 # https://git.kernel.org/pub/scm/linux/security/vulns.git
 
+import asyncio
 import json
 import logging
 import re
@@ -23,6 +24,12 @@ logger = logging.getLogger(__name__)
 REPO_LOCK = Lock()
 # Cache git pull to avoid excessive network calls
 REPO_UPDATE_INTERVAL = 600  # seconds
+GIT_CLONE_TIMEOUT = 300  # seconds
+GIT_PULL_TIMEOUT = 60  # seconds
+
+# Single-flight repo setup at the async level — only one to_thread worker
+# runs setup() at a time; other callers await without pinning a thread pool slot.
+_setup_lock = asyncio.Lock()
 
 
 class LINUXCVEToolInput(BaseToolInput):
@@ -125,6 +132,7 @@ class KernelVulnsRepo:
                         check=True,
                         capture_output=True,
                         text=True,
+                        timeout=GIT_CLONE_TIMEOUT,
                     )
                     self.lock_file.touch()
                 except subprocess.CalledProcessError as e:
@@ -146,11 +154,12 @@ class KernelVulnsRepo:
                         check=True,
                         capture_output=True,
                         text=True,
+                        timeout=GIT_PULL_TIMEOUT,
                     )
                     self.lock_file.touch()
-                except subprocess.CalledProcessError as e:
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                     logger.warning(
-                        f"Git pull failed for vulns repo, using stale data: {e.stderr}"
+                        f"Git pull failed for vulns repo, using stale data: {e}"
                     )
 
 
@@ -257,7 +266,9 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
     and parsing the relevant files for context.
     """
     try:
-        subprocess.run(["git", "--version"], check=True, capture_output=True)  # noqa: ASYNC221
+        await asyncio.to_thread(
+            subprocess.run, ["git", "--version"], check=True, capture_output=True
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         logger.warning("git is not installed or not in PATH. This tool cannot run.")
         return LINUXCVEToolResponse.error(cve_id, "Failed to run tool.")
@@ -265,16 +276,17 @@ async def kernel_cve_lookup(cve_id: CVEID) -> LINUXCVEToolResponse:
     cache_path = Path(get_settings().config_dir) / "kernel_cves"
     repo = KernelVulnsRepo(cache_path)
 
-    try:
-        repo.setup()
-    except subprocess.CalledProcessError:
-        logger.warning("failed to setup git repo.")
-        return LINUXCVEToolResponse.error(cve_id, "Failed to setup tool.")
+    async with _setup_lock:
+        try:
+            await asyncio.to_thread(repo.setup)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            logger.warning("failed to setup git repo.")
+            return LINUXCVEToolResponse.error(cve_id, "Failed to setup tool.")
 
-    return LINUXCVEToolResponse(
-        cve_id=cve_id,
-        metadata=_find_and_parse_cve_files(repo.repo_path, cve_id),
+    metadata = await asyncio.to_thread(
+        _find_and_parse_cve_files, repo.repo_path, cve_id
     )
+    return LINUXCVEToolResponse(cve_id=cve_id, metadata=metadata)
 
 
 @Tool
