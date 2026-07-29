@@ -113,7 +113,7 @@ class FlawFinder:
 
     def search(
         self,
-        state: BotPosition = BotPosition(),
+        state: BotPosition,
         age_cutoff: datetime | None = None,
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
@@ -530,7 +530,7 @@ class Bot(StateProxy):
             # determine the next state
             pkeys = self.pending.keys()
             next_state: BotPosition | None = None
-            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min):
+            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min(tz=UTC)):
                 if self.pending[s]:
                     # this CVE is still being processed
                     break
