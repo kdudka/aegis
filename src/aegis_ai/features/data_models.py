@@ -1,5 +1,5 @@
-import datetime
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -17,7 +17,7 @@ class feature_deps:
     """
 
     current_dt: str = field(
-        default_factory=lambda: datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        default_factory=lambda: datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M:%S"),
     )
     exclude_osidb_fields: list[str] = field(
         default_factory=list,
