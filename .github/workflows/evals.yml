@@ -1,8 +1,8 @@
 name: Evals
 
 on:
-  pull_request:
-    branches: [ "main" ]
+  push:
+    branches: [ "github-actions-evals" ]
 
 permissions:
   contents: read
