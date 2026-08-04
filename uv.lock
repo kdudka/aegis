@@ -142,7 +142,7 @@ requires-dist = [
     { name = "mcp-pypi", specifier = ">=2.7.1" },
     { name = "numpy", specifier = ">=2.3.3" },
     { name = "numpy", marker = "extra == 'ml-deps'", specifier = ">=2.3.2" },
-    { name = "osidb-bindings", specifier = ">=5.0.0" },
+    { name = "osidb-bindings", specifier = ">=5.13.0" },
     { name = "packageurl-python", specifier = ">=0.16.0" },
     { name = "pandas", marker = "extra == 'classifier-deps'", specifier = ">=1.5.0" },
     { name = "pandas", marker = "extra == 'ml-deps'", specifier = ">=1.5.0" },
