@@ -118,7 +118,7 @@ class FlawFinder:
     ) -> Sequence[CVEID]:
         # infer search predicates from ELIGIBLE_FLAWS
         kwargs: dict[str, Any] = {
-            "include_fields": ["cve_id"],
+            "include_fields": ["cve_id", "updated_dt"],
             "cve_id__isempty": False,  # only flaws with a CVE ID
             "order": ["updated_dt"],
             "source_in": [s for s in ELIGIBLE_FLAWS["source"]],
@@ -156,13 +156,16 @@ class FlawFinder:
         # initiate the OSIDB search
         logger.info("searching CVEs: %s", _kwargs_for_log(kwargs))
         flaw_iterator = self.osidb.flaws.retrieve_list_iterator(**kwargs)
-        cve_ids = [flaw.cve_id for flaw in flaw_iterator]
 
         if state.last_cve is None:
-            return cve_ids
+            return [flaw.cve_id for flaw in flaw_iterator]
 
-        # exclude the last processed CVE when resuming from state
-        return [cve for cve in cve_ids if cve != state.last_cve]
+        # skip the last processed CVE unless it was updated since last processing
+        return [
+            flaw.cve_id
+            for flaw in flaw_iterator
+            if flaw.cve_id != state.last_cve or flaw.updated_dt != state.updated_dt
+        ]
 
     @staticmethod
     def validate(flaw_data: FlawData) -> None:
