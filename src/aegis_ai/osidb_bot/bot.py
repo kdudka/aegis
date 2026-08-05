@@ -286,8 +286,8 @@ class FlawUpdater:
             if isinstance(entry, dict)  # guard against malformed OSIDB data
         )
 
-    def create_alias_label(self, label_name: str) -> bool:
-        """create a flaw label of type "alias" with name label_name, return True on success"""
+    def create_label(self, label_name: str, label_type: str = "alias") -> bool:
+        """Create a flaw label with the given name and type, return True on success."""
         assert self.flaw_data
         if self.read_only:
             msg = f"read-only mode, skipping creation of label '{label_name}'"
@@ -300,7 +300,7 @@ class FlawUpdater:
                 flaw_id=flaw_uuid,
                 form_data={
                     "label": label_name,
-                    "type": "alias",
+                    "type": label_type,
                     "state": "NEW",
                 },
             )
@@ -326,7 +326,7 @@ class FlawUpdater:
 
         any_update = False
         for label_name in labels:
-            if self.create_alias_label(label_name):
+            if self.create_label(label_name):
                 any_update = True
 
         if not any_update:
@@ -413,7 +413,7 @@ class FlawUpdater:
             self._info(f"updated {self.updated_fields}")
 
         if not all_ok:
-            self.create_alias_label("manual-triage")
+            self.create_label("manual-triage")
 
         return processed
 
@@ -508,7 +508,7 @@ class Bot(StateProxy):
                 and flaw_updater
             ):
                 # the last retry attempt failed, create the manual-triage label
-                flaw_updater.create_alias_label("manual-triage")
+                flaw_updater.create_label("manual-triage")
 
             if not handled_failure:
                 # propagate all but RuntimeError exceptions
