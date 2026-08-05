@@ -413,7 +413,7 @@ class FlawUpdater:
             self._info(f"updated {self.updated_fields}")
 
         if not all_ok:
-            self.create_label("manual-triage")
+            self.create_label("manual-triage", label_type="workflow")
 
         return processed
 
@@ -508,7 +508,7 @@ class Bot(StateProxy):
                 and flaw_updater
             ):
                 # the last retry attempt failed, create the manual-triage label
-                flaw_updater.create_label("manual-triage")
+                flaw_updater.create_label("manual-triage", label_type="workflow")
 
             if not handled_failure:
                 # propagate all but RuntimeError exceptions

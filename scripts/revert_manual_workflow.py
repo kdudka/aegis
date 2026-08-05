@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Revert flaws switched to the MANUAL workflow by mistake (AEGIS-475).
 
-Removes the ``manual-triage`` alias label from eligible flaws so that the
+Removes the ``manual-triage`` label from eligible flaws so that the
 OSIDB workflow reverts from MANUAL back to DEFAULT, allowing the Aegis bot
 to pick them up again.
 """

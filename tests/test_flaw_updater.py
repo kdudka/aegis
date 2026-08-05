@@ -456,7 +456,7 @@ async def test_flaw_updater_read_only_no_manual_triage_label(mock_exec_feature):
 
 MANUAL_TRIAGE_LABEL = {
     "label": "manual-triage",
-    "type": "alias",
+    "type": "workflow",
     "state": "NEW",
 }
 
