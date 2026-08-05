@@ -156,7 +156,7 @@ ml_deps = [
     "datasets>=2.0.0",
     "huggingface-hub>=0.8.0",
     "numpy>=2.3.2",
-    "torch>=1.9.0",
+    "torch>=2.13.0",
     "tqdm>=4.60.0",
     "transformers>=4.20.0",
 ]
