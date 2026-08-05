@@ -341,9 +341,53 @@ class FlawUpdater:
         if not any_update:
             self.updated_fields.discard(_KERNEL_FLAGS_KEY)
 
+    def save_flaw(self) -> bool:
+        """Save flaw data to OSIDB (two-step: flaw update + CVSS subresource).
+
+        Returns True if the flaw was fully saved, False on error.
+        """
+        assert self.flaw_data
+        flaw_saved: bool = False
+        try:
+            flaw_uuid = self.flaw_data["uuid"]
+            self.osidb.flaws.update(
+                id=flaw_uuid,
+                form_data=self.flaw_data,
+            )
+            flaw_saved = True
+
+            if "cvss_scores" in self.updated_fields:
+                # Apply RH CVSS via subresource (flaws.update() does not update cvss_scores)
+                rh_cvss = self.flaw_data["cvss_scores"][0]
+                cast(Any, self.osidb.flaws).cvss_scores.create(
+                    flaw_id=flaw_uuid,
+                    form_data=rh_cvss,
+                )
+
+            # successfully processed (we do not retry when only label creation fails)
+            self.retry_list.pop(self.cve, None)
+            return True
+
+        except Exception as e:
+            # failed to save changes
+            msg_suffix = f"({e.__class__.__name__})"
+            if flaw_saved:
+                self._warn(f"failed to save RH CVSS {msg_suffix}")
+                self.updated_fields.remove("cvss_scores")
+            else:
+                self._warn(
+                    f"failed to save changes: {self.updated_fields} {msg_suffix}"
+                )
+                self.updated_fields.clear()
+
+            self._log_osidb_response(e)
+
+            # log full exception in debug mode only
+            logger.debug(f"{self.cve}: {e!s}")
+            return False
+
     async def do(self) -> bool:
         assert self.flaw_data
-        processed: bool = False
 
         # validate eligibility on the fresh flaw data to avoid TOCTOU
         try:
@@ -369,45 +413,9 @@ class FlawUpdater:
         aegis_meta["processed"] = True
 
         # write flaw data
-        flaw_saved: bool = False
-        try:
-            flaw_uuid = self.flaw_data["uuid"]
-            self.osidb.flaws.update(
-                id=flaw_uuid,
-                form_data=self.flaw_data,
-            )
-            flaw_saved = True
-
-            if "cvss_scores" in self.updated_fields:
-                # Apply RH CVSS via subresource (flaws.update() does not update cvss_scores)
-                rh_cvss = self.flaw_data["cvss_scores"][0]
-                cast(Any, self.osidb.flaws).cvss_scores.create(
-                    flaw_id=flaw_uuid,
-                    form_data=rh_cvss,
-                )
-
-            # successfully processed (we do not retry when only label creation fails)
-            processed = True
-            self.retry_list.pop(self.cve, None)
-
-        except Exception as e:
-            # failed to save changes
+        processed: bool = self.save_flaw()
+        if not processed:
             all_ok = self.on_failure(self.cve) if self.on_failure else False
-
-            msg_suffix = f"({e.__class__.__name__})"
-            if flaw_saved:
-                self._warn(f"failed to save RH CVSS {msg_suffix}")
-                self.updated_fields.remove("cvss_scores")
-            else:
-                self._warn(
-                    f"failed to save changes: {self.updated_fields} {msg_suffix}"
-                )
-                self.updated_fields.clear()
-
-            self._log_osidb_response(e)
-
-            # log full exception in debug mode only
-            logger.debug(f"{self.cve}: {e!s}")
 
         if _KERNEL_FLAGS_KEY in self.updated_fields:
             self._create_labels()
