@@ -270,7 +270,7 @@ class FlawUpdater:
                 all_ok = False
                 self._warn(str(e))
 
-        if not self.updated_fields and not self.force:
+        if not self.updated_fields:
             # nothing has changed (unexpectedly)
             self._warn("left unchanged")
             return False
@@ -403,22 +403,25 @@ class FlawUpdater:
         # apply suggestions
         all_ok: bool = await self.apply_suggestions()
 
-        if self.read_only:
-            msg = f"read-only mode, skipping OSIDB update of {self.updated_fields}"
-            self._warn(msg)
-            return False
+        # save flaw data only when any field has been updated
+        processed: bool = False
+        if self.updated_fields:
+            if self.read_only:
+                msg = f"read-only mode, skipping OSIDB update of {self.updated_fields}"
+                self._warn(msg)
+                return False
 
-        # mark the flaw as processed by Aegis/osidb-bot
-        aegis_meta = self.flaw_data.setdefault("aegis_meta", {})
-        aegis_meta["processed"] = True
+            # mark the flaw as processed by Aegis/osidb-bot
+            aegis_meta = self.flaw_data.setdefault("aegis_meta", {})
+            aegis_meta["processed"] = True
 
-        # write flaw data
-        processed: bool = self.save_flaw()
-        if not processed:
-            all_ok = self.on_failure(self.cve) if self.on_failure else False
+            # write flaw data
+            processed = self.save_flaw()
+            if not processed:
+                all_ok = self.on_failure(self.cve) if self.on_failure else False
 
-        if _KERNEL_FLAGS_KEY in self.updated_fields:
-            self._create_labels()
+            if _KERNEL_FLAGS_KEY in self.updated_fields:
+                self._create_labels()
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
