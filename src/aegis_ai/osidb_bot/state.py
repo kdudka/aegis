@@ -19,8 +19,8 @@ class BotPosition(BaseModel):
     # the last processed CVE
     last_cve: CVEID | None = None
 
-    # creation timestamp of the last processed CVE
-    created_dt: datetime | None = None
+    # update timestamp of the last processed CVE
+    updated_dt: datetime | None = None
 
 
 class BotState(BotPosition):
@@ -196,10 +196,10 @@ class StateProxy:
 
     def _log_position(self, action: str) -> None:
         logger.info(
-            "state %s: last_cve=%s, created_dt=%s, len(retry_list)=%d",
+            "state %s: last_cve=%s, updated_dt=%s, len(retry_list)=%d",
             action,
             self._state.last_cve,
-            self._state.created_dt,
+            self._state.updated_dt,
             len(self._retry_list),
         )
 
@@ -218,7 +218,7 @@ class StateProxy:
         """Rebuild BotState from current retry_list and write to disk."""
         self._state = BotState(
             last_cve=self._state.last_cve,
-            created_dt=self._state.created_dt,
+            updated_dt=self._state.updated_dt,
             retry_list=self._retry_list,
         )
         if not self.read_only:
@@ -228,7 +228,7 @@ class StateProxy:
     def state(self, value: BotPosition) -> None:
         self._state = BotState(
             last_cve=value.last_cve,
-            created_dt=value.created_dt,
+            updated_dt=value.updated_dt,
             retry_list=self._retry_list,
         )
         if not self.read_only:

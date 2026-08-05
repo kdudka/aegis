@@ -120,7 +120,7 @@ class FlawFinder:
         kwargs: dict[str, Any] = {
             "include_fields": ["cve_id"],
             "cve_id__isempty": False,  # only flaws with a CVE ID
-            "order": ["created_dt"],
+            "order": ["updated_dt"],
             "source_in": [s for s in ELIGIBLE_FLAWS["source"]],
             **{
                 f"workflow_{predicate}_in": list(
@@ -145,16 +145,13 @@ class FlawFinder:
                 key = f"{field}_isempty"
                 kwargs[key] = True
 
-        # compute the lower bound on created_dt
-        created_dt_gte: datetime | None
-        if state.created_dt is None:
-            created_dt_gte = age_cutoff
-        elif age_cutoff is None:
-            created_dt_gte = state.created_dt
-        else:
-            created_dt_gte = max(state.created_dt, age_cutoff)
-        if created_dt_gte is not None:
-            kwargs["created_dt_gte"] = created_dt_gte
+        # --max-age limits how far back we look by flaw creation time
+        if age_cutoff is not None:
+            kwargs["created_dt_gte"] = age_cutoff
+
+        # state file position limits by flaw update time
+        if state.updated_dt is not None:
+            kwargs["updated_dt_gte"] = state.updated_dt
 
         # initiate the OSIDB search
         logger.info("searching CVEs: %s", _kwargs_for_log(kwargs))
@@ -244,7 +241,7 @@ class FlawUpdater:
         assert self.flaw_data
         return BotPosition(
             last_cve=self.flaw_data["cve_id"],
-            created_dt=datetime.fromisoformat(self.flaw_data["created_dt"]),
+            updated_dt=datetime.fromisoformat(self.flaw_data["updated_dt"]),
         )
 
     async def apply_suggestions(self) -> bool:
@@ -529,7 +526,7 @@ class Bot(StateProxy):
             # determine the next state
             pkeys = self.pending.keys()
             next_state: BotPosition | None = None
-            for s in sorted(pkeys, key=lambda s: s.created_dt or datetime.min):  # noqa: DTZ901
+            for s in sorted(pkeys, key=lambda s: s.updated_dt or datetime.min):  # noqa: DTZ901
                 if self.pending[s]:
                     # this CVE is still being processed
                     break
@@ -538,7 +535,7 @@ class Bot(StateProxy):
                 next_state = s
                 del self.pending[next_state]
 
-            # do not update state if the CVE with lowest created_dt is still being processed
+            # do not update state if the CVE with lowest updated_dt is still being processed
             if next_state:
                 # update state (and state file unless read-only)
                 assert not self.retrying_failed
