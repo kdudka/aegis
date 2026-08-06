@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2] - 2026-08-06
+
+### Changed
+- migrated to `ruff 0.16.x` with all new lint rules resolved [\[AEGIS-482\]](https://redhat.atlassian.net/browse/AEGIS-482)
+- `osidb-bot` uses `workflow` label type for `manual-triage` instead of `alias` [\[AEGIS-480\]](https://redhat.atlassian.net/browse/AEGIS-480)
+- `osidb-bot` filters flaws by `workflow_name` server-side via `osidb-bindings 5.13.0`, replacing client-side classification filtering [\[AEGIS-483\]](https://redhat.atlassian.net/browse/AEGIS-483)
+
+### Fixed
+- moved blocking git operations off the event loop in `kernel_cve_lookup()` [\[AEGIS-482\]](https://redhat.atlassian.net/browse/AEGIS-482)
+- narrowed global cache lock in GHSA and OSIDB eval cache retrievers to avoid serializing unrelated lookups [\[AEGIS-482\]](https://redhat.atlassian.net/browse/AEGIS-482)
+- fixed timezone-naive `datetime` usage in osidb-bot and `feature_deps` [\[AEGIS-482\]](https://redhat.atlassian.net/browse/AEGIS-482)
+- bumped `torch` lower bound to `2.13.0` to address `CVE-2025-3000`
+
+
 ## [0.8.1] - 2026-07-28
 
 ### Fixed
