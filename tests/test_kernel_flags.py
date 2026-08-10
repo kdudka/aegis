@@ -365,7 +365,7 @@ class TestFlawUpdaterLabelCreation:
         session.flaws.labels.create.assert_called_once_with(
             flaw_id="00000000-0000-0000-0000-000000000099",
             form_data={
-                "label": "kpanic",
+                "name": "kpanic",
                 "type": "alias",
                 "state": "NEW",
             },

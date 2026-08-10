@@ -307,7 +307,7 @@ class FlawUpdater:
             cast(Any, self.osidb.flaws).labels.create(
                 flaw_id=flaw_uuid,
                 form_data={
-                    "label": label_name,
+                    "name": label_name,
                     "type": label_type,
                     "state": "NEW",
                 },
