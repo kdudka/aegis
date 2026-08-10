@@ -318,6 +318,7 @@ class FlawUpdater:
         except Exception as e:
             msg = f"failed to create label '{label_name}' ({e.__class__.__name__})"
             self._warn(msg)
+            self._log_osidb_response(e)
             logger.debug("%s: %s", self.cve, e)
             return False
 
