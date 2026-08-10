@@ -232,6 +232,14 @@ class FlawUpdater:
     def _warn(self, msg: str) -> None:
         logger.warning(f"{self.cve}: {msg}")
 
+    def _log_osidb_response(self, e: Exception) -> None:
+        if isinstance(e, requests.exceptions.RequestException):
+            response = getattr(e, "response", None)
+            if response is not None:
+                fl = response.text.partition("\n")[0]
+                truncated = textwrap.shorten(fl, width=256, placeholder=" [...]")
+                self._info(f"OSIDB response: {truncated}")
+
     def position(self) -> BotPosition:
         assert self.flaw_data
         return BotPosition(
@@ -395,13 +403,7 @@ class FlawUpdater:
                 )
                 self.updated_fields.clear()
 
-            if isinstance(e, requests.exceptions.RequestException):
-                # log OSIDB response if available
-                response = getattr(e, "response", None)
-                if response is not None:
-                    fl = response.text.partition("\n")[0]
-                    truncated = textwrap.shorten(fl, width=256, placeholder=" [...]")
-                    self._info(f"OSIDB response: {truncated}")
+            self._log_osidb_response(e)
 
             # log full exception in debug mode only
             logger.debug(f"{self.cve}: {e!s}")
