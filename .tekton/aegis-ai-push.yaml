@@ -30,6 +30,8 @@ spec:
   # update the `:latest` tag on the container image only if it is built from the `main` branch
   - name: ADDITIONAL_TAGS
     value: [latest]
+  - name: git-ref
+    value: '{{target_branch}}'
   pipelineRef:
     # include the shared pipeline definition from aegis-build-pipeline.yaml
     resolver: git
