@@ -48,12 +48,8 @@ ELIGIBLE_FLAWS = {
         "UBUNTU",
         "UPSTREAM",
     ),
-    # only flaws in the empty/NEW states
-    "classification": (
-        {"workflow": "", "state": ""},
-        {"workflow": "DEFAULT", "state": ""},
-        {"workflow": "DEFAULT", "state": "NEW"},
-    ),
+    # only flaws with the DEFAULT workflow in the NEW state
+    "classification": ({"workflow": "DEFAULT", "state": "NEW"},),
     # only flaws with no affects
     "affects": ([],),
     # only flaws with no owner
