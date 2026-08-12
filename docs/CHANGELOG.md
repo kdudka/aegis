@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-12
+
+### Changed
+- `osidb-bot` now tracks flaws by `updated_dt` instead of `created_dt`, enabling re-processing when flaw data is updated in OSIDB [\[AEGIS-479\]](https://redhat.atlassian.net/browse/AEGIS-479)
+- `osidb-bot` now requires workflow classification before processing, ensuring flaws are handled only after the OSIDB backend has created the Jira task [\[AEGIS-479\]](https://redhat.atlassian.net/browse/AEGIS-479)
+- `osidb-bot` now skips the OSIDB save when no fields are updated, preventing unnecessary reprocessing [\[AEGIS-479\]](https://redhat.atlassian.net/browse/AEGIS-479)
+
+### Added
+- added SAST/SARIF reporting to Konflux CI pipelines with human-readable summaries and GitHub Code Scanning uploads [\[AEGIS-86\]](https://redhat.atlassian.net/browse/AEGIS-86)
+
+
 ## [0.8.3] - 2026-08-10
 
 ### Changed
