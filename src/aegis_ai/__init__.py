@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, TypedDict, TypeIs
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from _pytest._io import TerminalWriter
 from _pytest.logging import ColoredLevelFormatter
 from dotenv import load_dotenv
@@ -171,7 +171,7 @@ class SuppressThirdPartyTracebackFilter(logging.Filter):
 class _ProviderKwargs(TypedDict):
     """named args of AI Providers"""
 
-    http_client: httpx.AsyncClient
+    http_client: httpx2.AsyncClient
 
 
 class AppSettings(BaseSettings):
@@ -229,16 +229,16 @@ class AppSettings(BaseSettings):
     # shared kwargs for model settings usage across the codebase
     model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
-    # customized httpx.AsyncClient with enhanced logging
-    http_client: httpx.AsyncClient | None = Field(
+    # customized httpx2.AsyncClient with enhanced logging
+    http_client: httpx2.AsyncClient | None = Field(
         default=None, exclude=True, repr=False
     )
 
-    def _get_http_client(self) -> httpx.AsyncClient:
-        """customized httpx.AsyncClient with enhanced logging"""
+    def _get_http_client(self) -> httpx2.AsyncClient:
+        """customized httpx2.AsyncClient with enhanced logging"""
         if self.http_client is None:
             # create the object only once
-            async def _log_request(request: httpx.Request) -> None:
+            async def _log_request(request: httpx2.Request) -> None:
                 msg = f'HTTP Request: {request.method} {request.url} "sending request"'
                 logger.debug(msg)
 
@@ -247,8 +247,8 @@ class AppSettings(BaseSettings):
             # deadline (below 10s).
             timeout = max(self.default_llm_prompt_timeout, 10)
 
-            self.http_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(timeout),
+            self.http_client = httpx2.AsyncClient(
+                timeout=httpx2.Timeout(timeout),
                 event_hooks={"request": [_log_request]},
             )
 
