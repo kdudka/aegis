@@ -171,8 +171,15 @@ def setup_logging_for_session():
     level = "DEBUG" if logging.getLogger().isEnabledFor(logging.DEBUG) else "INFO"
     config_logging(level=level)
 
-    # Suppress noisy httpx/httpcore request logs during eval runs only
-    for noisy_logger in ("httpx", "httpx._client", "httpcore"):
+    # Suppress noisy httpx/httpx2/httpcore request logs during eval runs only
+    for noisy_logger in (
+        "httpcore",
+        "httpcore2",
+        "httpx",
+        "httpx._client",
+        "httpx2",
+        "httpx2._client",
+    ):
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
     # Suppress the "[tool call] ..." logs ONLY during eval runs
