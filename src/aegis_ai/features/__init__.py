@@ -5,6 +5,7 @@ from collections.abc import Awaitable
 from typing import Any
 
 from google.genai.errors import ServerError
+from httpx2 import ReadError
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
@@ -246,13 +247,17 @@ class Feature(ABC):
                     # success (no exception)
                     break
 
-                except (ModelHTTPError, ServerError) as e:
+                except (ModelHTTPError, ServerError, ReadError) as e:
                     if agent_default_max_retries <= attempt:
                         # exceeded retry attempts count
                         raise
 
-                    code = e.status_code if isinstance(e, ModelHTTPError) else e.code
-                    if code not in HTTP_RETRY_CODES:
+                    code = (
+                        e.status_code
+                        if isinstance(e, ModelHTTPError)
+                        else getattr(e, "code", None)
+                    )
+                    if code is not None and code not in HTTP_RETRY_CODES:
                         # propagate other exceptions
                         raise
 

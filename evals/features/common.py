@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 from google.genai.errors import ServerError
+from httpx2 import ReadError
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModelSettings
@@ -168,13 +169,17 @@ class LLMJudgeWrapper(LLMJudge):
                 # regular evaluation of LLMJudge
                 return await super().evaluate(ctx)
 
-            except (ModelHTTPError, ServerError) as e:
+            except (ModelHTTPError, ServerError, ReadError) as e:
                 if agent_default_max_retries <= attempt:
                     # exceeded retry attempts count
                     raise
 
-                code = e.status_code if isinstance(e, ModelHTTPError) else e.code
-                if code not in HTTP_RETRY_CODES:
+                code = (
+                    e.status_code
+                    if isinstance(e, ModelHTTPError)
+                    else getattr(e, "code", None)
+                )
+                if code is not None and code not in HTTP_RETRY_CODES:
                     # propagate other exceptions
                     raise
 
