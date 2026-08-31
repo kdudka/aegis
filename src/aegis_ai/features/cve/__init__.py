@@ -7,13 +7,15 @@ import cvss
 import aegis_ai.toolsets.tools.osidb as osidb_tool
 from aegis_ai import get_settings
 from aegis_ai.data_models import CVEID
-from aegis_ai.features import Feature
+from aegis_ai.features import DeterministicFeature, DeterministicResult, Feature
 from aegis_ai.features.cve.data_models import (
     CATEGORY_WEIGHTS,
+    AffectedComponentEntry,
     CVEFeatureInput,
     CVSSDiffExplainerModel,
     PIIReportModel,
     QualityReviewModel,
+    QueryAffectedComponentsModel,
     RevisedExplanationModel,
     SuggestAffectedComponentsModel,
     SuggestCWEModel,
@@ -1240,3 +1242,29 @@ The three core questions every review must address:
         )
 
         return await self.guarded_run(prompt, deps=deps, output_type=QualityReviewModel)
+
+
+class QueryAffectedComponents(DeterministicFeature):
+    """Deterministic query: return affected components from OSIDB affects data."""
+
+    async def exec(self, cve_id: CVEID, static_context: Any = None):
+        cve = await osidb_tool.cve_retrieve(cve_id)
+
+        entries = [
+            AffectedComponentEntry(
+                ps_update_stream=affect["ps_update_stream"],
+                purl=affect["purl"],
+            )
+            for affect in cve.affects
+            if affect.get("affected") == "AFFECTED"
+            and affect.get("purl")
+            and affect.get("ps_update_stream")
+        ]
+
+        output = QueryAffectedComponentsModel(
+            cve_id=cve_id,
+            affected_components=entries,
+        )
+
+        logger.info(f"QueryAffectedComponents({cve_id}) = {output.printable_outcome()}")
+        return DeterministicResult(output)

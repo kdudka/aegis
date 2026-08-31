@@ -10,7 +10,8 @@
           "suggest-affected-components",
           "identify-pii",
           "cvss-diff-explainer",
-          "quality-review"
+          "quality-review",
+          "query-affected-components"
         ],
         "title": "CVEFeatureName",
         "type": "string"

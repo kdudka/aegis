@@ -35,6 +35,13 @@ else:
 DEFAULT_MAX_AGE = "1y"
 
 
+_LLM_FREE_COMMANDS = frozenset(
+    {
+        "query-affected-components",
+    }
+)
+
+
 @click.group()
 @click.option(
     "--version",
@@ -46,7 +53,8 @@ DEFAULT_MAX_AGE = "1y"
     help="Display griffon version.",
 )
 @click.option("--debug", "-d", is_flag=True, help="Debug log level.")
-def aegis_cli(debug):
+@click.pass_context
+def aegis_cli(ctx, debug):
     """Top level click entrypoint"""
 
     if not debug:
@@ -55,6 +63,10 @@ def aegis_cli(debug):
         config_logging(level="DEBUG")
 
     logging.info(f"Aegis version: {get_settings().app_version}")
+
+    if ctx.invoked_subcommand in _LLM_FREE_COMMANDS:
+        return
+
     logging.info(f"Aegis cli_agent: {cli_agent.name}")
 
     if check_llm_status():
@@ -367,6 +379,23 @@ def suggest_affected_components(cve_id):
 
     async def _doit():
         feature = cve.SuggestAffectedComponents(cli_agent)
+        return await feature.exec(cve_id)
+
+    result = asyncio.run(_doit())
+    if result:
+        console.print(Rule())
+        console.print(result.output.model_dump_json(indent=2))
+
+
+@aegis_cli.command()
+@click.argument("cve_id", type=CVEID)
+def query_affected_components(cve_id):
+    """
+    Query OSIDB for affected components (deterministic, no LLM).
+    """
+
+    async def _doit():
+        feature = cve.QueryAffectedComponents()
         return await feature.exec(cve_id)
 
     result = asyncio.run(_doit())

@@ -42,6 +42,41 @@ class CVEDataCriticOutput(AegisFeatureModel):
     )
 
 
+class AffectedComponentEntry(BaseModel):
+    """A single affected component with its update stream and PURL."""
+
+    ps_update_stream: str = Field(
+        ...,
+        description="The product stream update identifier (e.g., 'rhel-9.6.0.z').",
+    )
+
+    purl: str = Field(
+        ...,
+        description="Package URL identifying the source RPM package.",
+    )
+
+
+class QueryAffectedComponentsModel(BaseModel):
+    """Deterministic query result: affected components from OSIDB affects."""
+
+    cve_id: CVEID = Field(
+        ...,
+        description="The CVE identifier that was queried.",
+    )
+
+    affected_components: list[AffectedComponentEntry] = Field(
+        default_factory=list,
+        description="List of affected components with their update streams and PURLs.",
+    )
+
+    disclaimer: Literal[
+        "This is an experimental feature and its interface may change in future versions."
+    ] = "This is an experimental feature and its interface may change in future versions."
+
+    def printable_outcome(self) -> str:
+        return f"{len(self.affected_components)} affected component(s)"
+
+
 class SuggestAffectedComponentsModel(AegisFeatureModel):
     """Model for suggested affected components inferred from CVE data."""
 

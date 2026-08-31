@@ -163,6 +163,30 @@ async def run_with_heartbeat(runner: Awaitable, prefix: str) -> AgentRunResult:
             pass
 
 
+class DeterministicResult:
+    """Lightweight result wrapper for non-LLM features, matching the
+    ``result.output`` interface that callers (web, CLI, bot) expect."""
+
+    def __init__(self, output: BaseModel):
+        self.output = output
+
+
+class DeterministicFeature(ABC):
+    """Base class for features that do not use an LLM agent.
+
+    Accepts ``agent`` in the constructor for registry compatibility
+    (callers always pass ``agent=...``) but ignores it.
+    """
+
+    def __init__(self, agent: Agent | None = None):
+        pass
+
+    @abstractmethod
+    async def exec(self, *args: Any, **kwargs: Any) -> DeterministicResult:
+        """Run the feature. Subclasses define their own parameter signatures."""
+        ...
+
+
 class Feature(ABC):
     def __init__(self, agent: Agent):
         self.agent = agent

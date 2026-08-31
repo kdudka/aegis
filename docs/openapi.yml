@@ -10,6 +10,7 @@ components:
       - identify-pii
       - cvss-diff-explainer
       - quality-review
+      - query-affected-components
       title: CVEFeatureName
       type: string
     CVEMultiAnalysisRequest:
