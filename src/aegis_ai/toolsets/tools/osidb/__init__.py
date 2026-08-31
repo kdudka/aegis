@@ -228,8 +228,10 @@ async def cve_retrieve(cve_id: CVEID) -> CVE:
                 {
                     "affected": affect.affectedness,
                     "ps_module": affect.ps_module,
+                    "ps_update_stream": affect.ps_update_stream,
                     "ps_product": affect.ps_product,
                     "ps_component": affect.ps_component,
+                    "purl": affect.purl,
                     "impact": affect.impact,
                     "not_affected_justification": affect.not_affected_justification,
                     "delegated_not_affected_justification": affect.delegated_not_affected_justification,
