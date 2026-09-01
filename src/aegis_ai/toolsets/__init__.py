@@ -32,7 +32,7 @@ class LoggingToolset(WrapperToolset[AgentDepsT]):
         name: str,
         tool_args: dict[str, Any],
         ctx: RunContext[AgentDepsT],
-        tool: ToolsetTool[AgentDepsT],
+        tool: ToolsetTool[Any],
     ) -> Any:
         # log tool call entry
         args = ""
