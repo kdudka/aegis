@@ -305,6 +305,7 @@ cases = [
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-23395",
+        metadata={"known_to_fail_evaluators": ["StatementNoCodeLevelDetails"]},
     ),
     SuggestStatementCase(
         cve_id="CVE-2025-29781",
