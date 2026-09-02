@@ -654,6 +654,11 @@ cases = [
         metadata={"known_to_fail_evaluators": ["NoAffectsInExplanation"]},
     ),
     SuggestImpactCase(
+        cve_id="CVE-2026-41178",
+        expected_impact="MODERATE",
+        expected_cvss3_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+    ),
+    SuggestImpactCase(
         cve_id="CVE-2026-43914",
         expected_impact="IMPORTANT",
     ),

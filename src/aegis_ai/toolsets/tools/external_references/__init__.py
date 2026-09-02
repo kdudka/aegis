@@ -141,6 +141,7 @@ _GITHUB_REPO_PREFIXES = (
     "https://github.com/openbao/openbao/",
     "https://github.com/opencontainers/runc/",
     "https://github.com/opencontainers/selinux/",
+    "https://github.com/open-telemetry/opentelemetry-go/",
     "https://github.com/parallax/jsPDF/",
     "https://github.com/phpseclib/phpseclib/",
     "https://github.com/pjsip/pjproject/",
