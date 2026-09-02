@@ -1117,7 +1117,7 @@ spec:
 
           # create the pod in the ephemeral namespace and monitor it
           oc create -f aegis-eval.yaml -o json | jq -r .metadata.name | tee pod-name.txt
-          oc wait --for=condition=Ready --timeout=300s "pod/$(<pod-name.txt)" || oc get pods
+          oc wait --for=condition=Ready --timeout=900s "pod/$(<pod-name.txt)" || oc get pods
           oc logs -f "$(<pod-name.txt)"
           EC_JSON_PATH=".status.containerStatuses[0].state.terminated.exitCode"
           oc wait --for="jsonpath={$EC_JSON_PATH}" --timeout=30s "pod/$(<pod-name.txt)" || oc get pods
