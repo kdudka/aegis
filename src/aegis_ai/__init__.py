@@ -350,7 +350,7 @@ class AppSettings(BaseSettings):
 
             return GoogleModel(
                 model_name=self.default_llm_model_name,
-                provider=GoogleProvider(**provider_kwargs),  # ty: ignore[no-matching-overload]
+                provider=GoogleProvider(**provider_kwargs),
             )
 
         else:
