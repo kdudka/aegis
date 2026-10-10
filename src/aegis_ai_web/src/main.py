@@ -1057,7 +1057,7 @@ async def save_programmatic_feedback(request: Request, feedback: ProgrammaticFee
         log_email_mismatch(request, email)
 
         # Generate datetime once at the start to ensure consistency
-        entry_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]  # noqa: DTZ005
+        entry_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
         # Calculate exact match score (fallback)
         acceptance_score = calculate_acceptance_score(suggested, submitted)
