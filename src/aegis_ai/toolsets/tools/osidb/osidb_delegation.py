@@ -67,43 +67,76 @@ def _prepare_delegated_creds_for_thread(delegated_creds) -> str | None:
         return None
 
 
+def load_kerberos_library():
+    library_name = ctypes.util.find_library("krb5")
+    if library_name is None:
+        raise OSError("libkrb5 not found")
+
+    library = ctypes.CDLL(library_name)
+    library.krb5_init_context.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    library.krb5_init_context.restype = ctypes.c_int
+    library.krb5_cc_resolve.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    library.krb5_cc_resolve.restype = ctypes.c_int
+    library.krb5_cc_destroy.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    library.krb5_cc_destroy.restype = ctypes.c_int
+    library.krb5_cc_close.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    library.krb5_cc_close.restype = ctypes.c_int
+    library.krb5_free_context.argtypes = [ctypes.c_void_p]
+    return library
+
+
+def initialize_kerberos_context(library) -> ctypes.c_void_p:
+    context = ctypes.c_void_p()
+    result = library.krb5_init_context(ctypes.byref(context))
+    if result:
+        raise OSError(result, "krb5_init_context failed")
+    return context
+
+
+def close_kerberos_cache_handle(library, context, cache, ccache_name: str) -> None:
+    result = library.krb5_cc_close(context, cache)
+    if result:
+        logger.warning("Could not close delegated ccache handle %s", ccache_name)
+
+
+def resolve_kerberos_cache_handle(library, context, ccache_name: str):
+    cache = ctypes.c_void_p()
+    result = library.krb5_cc_resolve(context, ccache_name.encode(), ctypes.byref(cache))
+    if result:
+        if cache.value is not None:
+            close_kerberos_cache_handle(library, context, cache, ccache_name)
+        raise OSError(result, "krb5_cc_resolve failed")
+    return cache
+
+
+def destroy_kerberos_cache_handle(library, context, ccache_name: str) -> None:
+    cache = resolve_kerberos_cache_handle(library, context, ccache_name)
+    try:
+        result = library.krb5_cc_destroy(context, cache)
+    except Exception:
+        close_kerberos_cache_handle(library, context, cache, ccache_name)
+        raise
+    if result:
+        raise OSError(result, "krb5_cc_destroy failed")
+
+
+def destroy_kerberos_ccache_or_raise(ccache_name: str) -> None:
+    library = load_kerberos_library()
+    context = initialize_kerberos_context(library)
+    try:
+        destroy_kerberos_cache_handle(library, context, ccache_name)
+    finally:
+        library.krb5_free_context(context)
+
+
 def destroy_kerberos_ccache(ccache_name: str) -> None:
     """Destroy a temporary delegated credential cache."""
     try:
-        library_name = ctypes.util.find_library("krb5")
-        if library_name is None:
-            raise OSError("libkrb5 not found")
-        library = ctypes.CDLL(library_name)
-        library.krb5_init_context.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
-        library.krb5_init_context.restype = ctypes.c_int
-        library.krb5_cc_resolve.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_char_p,
-            ctypes.POINTER(ctypes.c_void_p),
-        ]
-        library.krb5_cc_resolve.restype = ctypes.c_int
-        library.krb5_cc_destroy.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        library.krb5_cc_destroy.restype = ctypes.c_int
-        library.krb5_free_context.argtypes = [ctypes.c_void_p]
-
-        context = ctypes.c_void_p()
-        result = library.krb5_init_context(ctypes.byref(context))
-        if result:
-            raise OSError(result, "krb5_init_context failed")
-        try:
-            cache = ctypes.c_void_p()
-            result = library.krb5_cc_resolve(
-                context,
-                ccache_name.encode(),
-                ctypes.byref(cache),
-            )
-            if result:
-                raise OSError(result, "krb5_cc_resolve failed")
-            result = library.krb5_cc_destroy(context, cache)
-            if result:
-                raise OSError(result, "krb5_cc_destroy failed")
-        finally:
-            library.krb5_free_context(context)
+        destroy_kerberos_ccache_or_raise(ccache_name)
     except (AttributeError, OSError):
         logger.warning(
             "Could not destroy delegated ccache %s", ccache_name, exc_info=True
