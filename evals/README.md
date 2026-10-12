@@ -31,15 +31,14 @@ export AEGIS_EVALS_LLM_API_KEY="…"
 
 ### Kernel eval ground truth
 
-The kernel suggest-impact eval (`test_suggest_impact_kernel_cves.py`) compares AEGIS predictions against OSIDB ground truth stored in `eval-kernel-cves.csv`. This CSV is a **generated artifact** — do not edit it by hand.
+The kernel suggest-impact eval (`test_suggest_impact_kernel_cves.py`) compares AEGIS predictions against OSIDB ground truth stored in `eval-kernel-cves.csv`.
 
 **Files** (all under `evals/features/cve/`):
 
 | File | Role |
 | ---- | ---- |
-| `kernel_eval_cves.txt` | Canonical list of CVE IDs for the eval set. One per line, `#` comments allowed. **Edit this file** to add or remove CVEs. |
-| `generate_kernel_eval_csv.py` | Pipeline that reads the text file, queries OSIDB for each CVE's impact and CVSS score, and writes `eval-kernel-cves.csv`. Requires a Kerberos ticket (`kinit`). |
-| `eval-kernel-cves.csv` | Generated 3-column CSV (`CVE`, `OSIDB Impact`, `OSIDB CVSS`) consumed by the eval test. Committed to the repo so evals are reproducible without OSIDB access. |
+| `eval-kernel-cves.csv` | Canonical CSV of CVE IDs with OSIDB ground truth (`OSIDB Impact`, `OSIDB CVSS`, `OSIDB CVSS Vector`). Committed to the repo so evals are reproducible without OSIDB access. Add new CVEs with `generate_kernel_eval_csv.py --cves`. |
+| `generate_kernel_eval_csv.py` | Queries OSIDB for each CVE's impact and CVSS score. Without `--cves`, re-processes all CVEs already in the CSV. Requires a Kerberos ticket (`kinit`). |
 
 **Caches** (populated by `make populate-kernel-caches` or `make prepare-kernel-eval`):
 
@@ -54,8 +53,11 @@ All three caches are checked into the repo so evals run without network access (
 **Regenerating ground truth and caches when you add a new kernel CVE:**
 
 ```bash
-# Full pipeline: generate CSV from OSIDB, populate kernel CVE context cache,
-# and populate patch/HTML cache.  Run this after editing kernel_eval_cves.txt.
+# Add new CVEs and regenerate ground truth + caches:
+uv run python evals/features/cve/generate_kernel_eval_csv.py --cves CVE-2026-99999
+make populate-kernel-caches
+
+# Or re-process all existing CVEs and rebuild caches:
 make prepare-kernel-eval
 ```
 
@@ -66,7 +68,7 @@ make generate-kernel-eval       # regenerate eval-kernel-cves.csv from OSIDB (re
 make populate-kernel-caches     # populate kernel CVE context + patch/HTML caches
 ```
 
-A session-scoped conftest fixture will **fail** if the CSV is missing and **warn** if it is older than the text file.
+A session-scoped conftest fixture will **fail** if the CSV is missing.
 
 ### Configuration Notes
 

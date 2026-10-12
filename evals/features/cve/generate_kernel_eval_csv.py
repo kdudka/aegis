@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate eval-kernel-cves.csv from the canonical CVE list and OSIDB.
+"""Generate eval-kernel-cves.csv from OSIDB.
 
-Reads CVE IDs from kernel_eval_cves.txt, looks up each CVE's impact and
-CVSS data from the local OSIDB cache (evals/osidb_cache/) first, falling
-back to a live OSIDB query when the cache misses.
+Looks up each CVE's impact and CVSS data from the local OSIDB cache
+(evals/osidb_cache/) first, falling back to a live OSIDB query when the
+cache misses.  When called without ``--cves``, re-processes every CVE
+already present in the CSV.
 
 Usage:
     uv run python evals/features/cve/generate_kernel_eval_csv.py
@@ -30,7 +31,6 @@ log = logging.getLogger(__name__)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent.parent
-CVE_LIST_PATH = SCRIPT_DIR / "kernel_eval_cves.txt"
 CSV_OUTPUT_PATH = SCRIPT_DIR / "eval-kernel-cves.csv"
 
 # Make evals package importable when running as a standalone script
@@ -46,19 +46,15 @@ CVSS_ISSUER_PRIORITY = ["RH", "NIST", "CVEORG", "OSV", "CISA"]
 CVE_RE = re.compile(r"^(CVE-\d{4}-\d{4,7})")
 
 
-def load_cve_list(path: Path) -> list[str]:
-    """Parse a plain-text CVE list, ignoring comments and blank lines."""
+def load_cves_from_csv(path: Path) -> list[str]:
+    """Read CVE IDs from the first column of an existing CSV."""
     cves: list[str] = []
-    seen: set[str] = set()
     with open(path, encoding="utf-8") as f:
-        for line in f:
-            stripped = line.split("#", 1)[0].strip()
-            if not stripped:
-                continue
-            m = CVE_RE.match(stripped)
-            if m and m.group(1) not in seen:
-                cves.append(m.group(1))
-                seen.add(m.group(1))
+        reader = csv.DictReader(f)
+        for row in reader:
+            cve_id = row.get("CVE", "").strip()
+            if cve_id:
+                cves.append(cve_id)
     return cves
 
 
@@ -183,14 +179,18 @@ def _normalize_impact(raw: str) -> str:
     return mapping.get(raw.upper(), raw.title()) if raw else ""
 
 
-def generate(
+def _fetch_rows(
     cve_ids: list[str],
-    output: Path,
     *,
     use_cache: bool = True,
     refresh_cache: bool = False,
-) -> None:
-    """Look up OSIDB data for each CVE and write the ground-truth CSV."""
+    fallback: dict[str, dict[str, str]] | None = None,
+) -> tuple[list[dict[str, str]], int]:
+    """Look up OSIDB data for each CVE. Returns (rows, error_count).
+
+    When *fallback* is provided, failed lookups reuse the existing row
+    from *fallback* (keyed by CVE ID) instead of emitting an ERROR row.
+    """
     rows: list[dict[str, str]] = []
     errors = 0
 
@@ -200,15 +200,23 @@ def generate(
         data = _fetch_flaw(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
         if data is None:
             errors += 1
-            log.warning("No data for %s: not in cache and live query failed", cve_id)
-            rows.append(
-                {
-                    "CVE": cve_id,
-                    "OSIDB Impact": "ERROR",
-                    "OSIDB CVSS": "",
-                    "OSIDB CVSS Vector": "",
-                }
-            )
+            if fallback and cve_id in fallback:
+                log.warning(
+                    "Lookup failed for %s — keeping existing ground truth", cve_id
+                )
+                rows.append(fallback[cve_id])
+            else:
+                log.warning(
+                    "No data for %s: not in cache and live query failed", cve_id
+                )
+                rows.append(
+                    {
+                        "CVE": cve_id,
+                        "OSIDB Impact": "ERROR",
+                        "OSIDB CVSS": "",
+                        "OSIDB CVSS Vector": "",
+                    }
+                )
             continue
 
         impact = _normalize_impact(data.get("impact", ""))
@@ -228,18 +236,58 @@ def generate(
         if i % 10 == 0:
             time.sleep(0.1)
 
-    fieldnames = ["CVE", "OSIDB Impact", "OSIDB CVSS", "OSIDB CVSS Vector"]
+    return rows, errors
+
+
+def _cve_sort_key(cve_id: str) -> tuple[int, int]:
+    """Sort CVE IDs numerically by year, then sequence number."""
+    m = CVE_RE.match(cve_id)
+    if not m:
+        return (0, 0)
+    parts = m.group(1).split("-")
+    return (int(parts[1]), int(parts[2]))
+
+
+def generate(
+    cve_ids: list[str],
+    output: Path,
+    *,
+    use_cache: bool = True,
+    refresh_cache: bool = False,
+    merge: bool = False,
+) -> None:
+    """Look up OSIDB data for each CVE and write the ground-truth CSV.
+
+    When *merge* is True and *output* already exists, new rows are merged
+    into the existing CSV (updating rows for CVEs that already exist).
+    Failed lookups preserve existing ground truth from the CSV.
+    """
+    existing: dict[str, dict[str, str]] = {}
+    if output.exists():
+        with open(output, newline="", encoding="utf-8") as f:
+            existing = {row["CVE"]: row for row in csv.DictReader(f)}
+
+    new_rows, errors = _fetch_rows(
+        cve_ids, use_cache=use_cache, refresh_cache=refresh_cache, fallback=existing
+    )
     ok = len(cve_ids) - errors
 
-    if ok == 0 and output.exists():
+    if ok == 0 and not existing:
         log.error(
-            "All %d lookups failed — refusing to overwrite %s with error-only data. "
+            "All %d lookups failed and no existing CSV to preserve. "
             "Are the CVEs in evals/osidb_cache/? For live queries: VPN + kinit.",
             errors,
-            output,
         )
         sys.exit(1)
 
+    if merge:
+        for row in new_rows:
+            existing[row["CVE"]] = row
+        rows = sorted(existing.values(), key=lambda r: _cve_sort_key(r["CVE"]))
+    else:
+        rows = new_rows
+
+    fieldnames = ["CVE", "OSIDB Impact", "OSIDB CVSS", "OSIDB CVSS Vector"]
     with open(output, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -258,13 +306,7 @@ def main() -> None:
         "--cves",
         nargs="+",
         metavar="CVE-ID",
-        help="Process specific CVEs instead of reading kernel_eval_cves.txt",
-    )
-    parser.add_argument(
-        "--cve-list",
-        type=Path,
-        default=CVE_LIST_PATH,
-        help=f"Path to CVE list file (default: {CVE_LIST_PATH.name})",
+        help="Process specific CVEs instead of re-processing the existing CSV",
     )
     parser.add_argument(
         "--output",
@@ -288,10 +330,12 @@ def main() -> None:
     if args.cves:
         cve_ids = args.cves
     else:
-        if not args.cve_list.exists():
-            print(f"ERROR: CVE list not found: {args.cve_list}", file=sys.stderr)
+        if not args.output.exists():
+            print(
+                f"ERROR: {args.output} not found and no --cves given", file=sys.stderr
+            )
             sys.exit(1)
-        cve_ids = load_cve_list(args.cve_list)
+        cve_ids = load_cves_from_csv(args.output)
 
     if not cve_ids:
         print("ERROR: No CVEs to process", file=sys.stderr)
@@ -303,6 +347,7 @@ def main() -> None:
         args.output,
         use_cache=not args.no_cache,
         refresh_cache=args.refresh_cache,
+        merge=bool(args.cves),
     )
 
 
