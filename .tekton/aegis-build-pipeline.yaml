@@ -1126,7 +1126,11 @@ spec:
           # create the pod in the ephemeral namespace and monitor it
           oc create -f aegis-eval.yaml -o json | jq -r .metadata.name | tee pod-name.txt
           oc wait --for=condition=Ready --timeout=900s "pod/$(<pod-name.txt)" || oc get pods
-          oc logs -f "$(<pod-name.txt)"
+          for i in {1..4}; do
+            # if `oc logs` fails with `error: read tcp ...: read: connection reset by peer` retry
+            # (since the beginning because we do not know where exactly the previous command failed)
+            oc logs -f "$(<pod-name.txt)" || sleep 2
+          done
           EC_JSON_PATH=".status.containerStatuses[0].state.terminated.exitCode"
           oc wait --for="jsonpath={$EC_JSON_PATH}" --timeout=30s "pod/$(<pod-name.txt)" || oc get pods
           EC=$(oc get -o json "pod/$(<pod-name.txt)" | jq "$EC_JSON_PATH")
