@@ -16,7 +16,7 @@ EXPOSE 9000
 
 # install dependencies and updates
 RUN microdnf --nodocs --setopt install_weak_deps=0 -y install \
-    gcc \
+    gcc-c++ \
     git-core \
     krb5-devel \
     krb5-workstation \
