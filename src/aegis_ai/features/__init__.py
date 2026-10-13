@@ -214,11 +214,8 @@ class Feature(ABC):
             return await run_with_heartbeat(runner, prefix=call_str)
 
         except TimeoutError:
-            # fmt: off
-            msg = f"{call_str}: LLM request timed out after {llm_prompt_timeout} seconds"
-            logger.warning(msg)
-            raise RuntimeError(msg)
-            # fmt: on
+            # will be handled in guarded_run()
+            raise
 
         except Exception as e:
             logger.warning(f"{call_str} raised an exception: {e.__class__.__name__}")
@@ -270,6 +267,15 @@ class Feature(ABC):
 
                     # success (no exception)
                     break
+
+                except TimeoutError:
+                    timeout_msg = f"{call_str}: LLM request timed out after {llm_prompt_timeout} seconds"
+                    logger.warning(timeout_msg)
+                    if agent_default_max_retries <= attempt:
+                        raise RuntimeError(timeout_msg)
+
+                    # retry only once in case it was an intermittent issue
+                    attempt = agent_default_max_retries - 1
 
                 except (ModelHTTPError, ServerError, ReadError) as e:
                     if agent_default_max_retries <= attempt:
