@@ -8,7 +8,11 @@ from google.genai.errors import ServerError
 from httpx2 import ReadError
 from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+)
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.run import AgentRunResult
 
@@ -277,7 +281,7 @@ class Feature(ABC):
                     # retry only once in case it was an intermittent issue
                     attempt = agent_default_max_retries - 1
 
-                except (ModelHTTPError, ServerError, ReadError) as e:
+                except (ModelAPIError, ModelHTTPError, ServerError, ReadError) as e:
                     if agent_default_max_retries <= attempt:
                         # exceeded retry attempts count
                         raise

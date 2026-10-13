@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from google.genai.errors import ServerError
 from httpx2 import ReadError
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -169,7 +169,7 @@ class LLMJudgeWrapper(LLMJudge):
                 # regular evaluation of LLMJudge
                 return await super().evaluate(ctx)
 
-            except (ModelHTTPError, ServerError, ReadError) as e:
+            except (ModelAPIError, ModelHTTPError, ServerError, ReadError) as e:
                 if agent_default_max_retries <= attempt:
                     # exceeded retry attempts count
                     raise
