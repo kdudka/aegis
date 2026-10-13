@@ -108,7 +108,7 @@ llm_input_tokens_warn_thr = get_env_int("AEGIS_LLM_INPUT_TOKENS_WARN_THR", 13107
 
 
 # initial delay in seconds after getting HTTP 503 status code from LLM (doubled on each attempt)
-PROMPT_RETRY_503_DELAY_INIT = 8
+PROMPT_RETRY_DELAY_INIT = 8
 
 # temperature override while retrying a prompt
 PROMPT_RETRY_TEMPERATURE = 0.9
@@ -286,7 +286,7 @@ class Feature(ABC):
                         raise
 
                     # retry the prompt with gradually increasing delay
-                    delay = (delay * 2) if delay else PROMPT_RETRY_503_DELAY_INIT
+                    delay = (delay * 2) if delay else PROMPT_RETRY_DELAY_INIT
 
                 except UnexpectedModelBehavior:
                     if agent_default_max_retries <= attempt:

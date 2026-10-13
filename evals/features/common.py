@@ -35,7 +35,7 @@ from pydantic_evals.reporting.render_numbers import default_render_number
 
 from aegis_ai import get_settings
 from aegis_ai.agents import agent_default_max_retries
-from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_503_DELAY_INIT
+from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_DELAY_INIT
 from aegis_ai.features.data_models import AegisFeatureModel
 
 # minimal acceptable length of an explanation (where applicable)
@@ -160,7 +160,7 @@ class LLMJudgeWrapper(LLMJudge):
 
     async def evaluate(self, ctx):
         # how long we sleep before next attempt
-        delay = PROMPT_RETRY_503_DELAY_INIT
+        delay = PROMPT_RETRY_DELAY_INIT
 
         # retry loop
         attempt = 0
