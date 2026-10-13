@@ -183,8 +183,13 @@ class LLMJudgeWrapper(LLMJudge):
                     # propagate other exceptions
                     raise
 
-                # increment the counter of retries
-                attempt += 1
+                if code == 429:
+                    # most likely {'code': 429, 'message': 'Resource has been exhausted (e.g. check quota).', 'status': 'RESOURCE_EXHAUSTED'}
+                    # -> retry only once in case it was an intermittent issue (to avoid exceeding the quota futher)
+                    attempt = agent_default_max_retries
+                else:
+                    # increment the counter of retries
+                    attempt += 1
 
                 # print a warning that we retry the prompt
                 msg = f"LLMJudge raised an exception: {e}"
