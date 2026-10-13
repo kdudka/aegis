@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10-minimal:10.2-1790556942@sha256:a9f9316ec3a1419a2de6ce4d2d9f034d477e97cdf2a16d6f04b7bd632ac753c4
+FROM registry.access.redhat.com/ubi10-minimal:10.2-1791784796@sha256:9712ae522acef7e90c571280b4faf69614b59395448d6bfb1c780c3bbf168218
 
 LABEL summary="AEGIS" \
       maintainer="Product Security DevOps <prodsec-dev@redhat.com>"
@@ -16,7 +16,7 @@ EXPOSE 9000
 
 # install dependencies and updates
 RUN microdnf --nodocs --setopt install_weak_deps=0 -y install \
-    gcc \
+    gcc-c++ \
     git-core \
     krb5-devel \
     krb5-workstation \

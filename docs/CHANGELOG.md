@@ -5,6 +5,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.10.0] - 2026-10-08
+
+### Changed
+- `suggest-impact` for kernel CVEs now provides more accurate suggestions with the `XGBoost` classifier disabled [\[AEGIS-507\]](https://redhat.atlassian.net/browse/AEGIS-507)
+
+### Added
+- established a shared, reproducible evaluation baseline for kernel-related Aegis changes [\[AEGIS-510\]](https://redhat.atlassian.net/browse/AEGIS-510)
+- added scripts to identify embargoed CVEs via OSIDB and filter them from feedback CSVs [\[AEGIS-514\]](https://redhat.atlassian.net/browse/AEGIS-514)
+- extended kernel CVE evaluation dataset from 44 to 111 CVEs with ground-truth data from security analysts [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+
+### Fixed
+- `suggest-impact` for kernel CVEs now applies kernel-specific CVSS rules (`RULES_KERNEL_ADDENDUM`) unconditionally, without requiring the kernel classifier to be enabled [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+- improved `suggest-impact` CVSS accuracy for kernel CVEs with rules for user-namespace capabilities, KVM scope changes, availability severity, cross-namespace network control, Bluetooth socket privileges, BPF token assessment, attacker-controlled races, device-driver integrity, and UAF confidentiality/integrity [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+- improved `quality-review` evaluator to use phrase-based matching for mitigation rewrite rules, eliminating false positives
+- improved kernel CVSS evaluation rubric to accept UAF code execution, authoritative issuer citations, data-carrying kernel structures, and KVM boundary crossings as valid justification [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+
+
+## [0.9.4] - 2026-10-01
+
+### Changed
+- gated OSIDB component tools (`component_count_tool`, `component_flaw_tool`) behind `AEGIS_USE_OSIDB_COMPONENT_TOOL_CONTEXT`, disabled by default, to reduce Aegis latency [\[AEGIS-522\]](https://redhat.atlassian.net/browse/AEGIS-522)
+- excluded `statement` and `mitigation` fields from `suggest-impact` input context, as these are typically empty when impact is being suggested in practice [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+
+### Added
+- added build system toolset for binary RPM enumeration via Deptopia/Koji, with pre-aggregated lookups to avoid LLM timeouts, gated behind `AEGIS_USE_BUILD_SYSTEM_TOOL_CONTEXT` [\[AEGIS-491\]](https://redhat.atlassian.net/browse/AEGIS-491)
+- added script to update kernel evals CSV from live OSIDB [\[AEGIS-511\]](https://redhat.atlassian.net/browse/AEGIS-511)
+
+### Fixed
+- `suggest-affected-components` now distinguishes vulnerable components from merely mentioned ones, reducing false affects [\[AEGIS-500\]](https://redhat.atlassian.net/browse/AEGIS-500)
+- excluded OSIDB fields are now also filtered from the prompt context, not just from tool responses, preventing the LLM from seeing ground-truth data it should predict [\[AEGIS-516\]](https://redhat.atlassian.net/browse/AEGIS-516)
+- fixed `osidb-bot` state tracking: use search-time `updated_dt` to avoid a TOCTOU race that silently skipped CVEs updated meanwhile [\[AEGIS-518\]](https://redhat.atlassian.net/browse/AEGIS-518)
+
+
 ## [0.9.3] - 2026-09-24
 
 ### Fixed

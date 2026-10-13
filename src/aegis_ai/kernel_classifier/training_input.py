@@ -151,7 +151,7 @@ def _derive_classification_bucket(created_date: str) -> str:
     if not created_date:
         return ""
     try:
-        year = datetime.strptime(created_date, "%Y-%m-%d").year  # noqa: DTZ007
+        year = datetime.strptime(created_date, "%Y-%m-%d").year
     except ValueError:
         return ""
     return "2024+" if year >= 2024 else "pre-2024"
@@ -268,7 +268,7 @@ def _date_to_ordinal(date_str: str) -> float | None:
     if not date_str:
         return None
     try:
-        return float(datetime.strptime(date_str, "%Y-%m-%d").toordinal())  # noqa: DTZ007
+        return float(datetime.strptime(date_str, "%Y-%m-%d").toordinal())
     except ValueError:
         return None
 
@@ -287,7 +287,7 @@ def _date_year_bucket(created_date: str) -> str:
     if not created_date:
         return "unknown"
     try:
-        return str(datetime.strptime(created_date, "%Y-%m-%d").year)  # noqa: DTZ007
+        return str(datetime.strptime(created_date, "%Y-%m-%d").year)
     except ValueError:
         return "unknown"
 

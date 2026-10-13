@@ -524,7 +524,7 @@ class Bot(StateProxy):
             # determine the next state
             pkeys = self.pending.keys()
             next_state: BotPosition | None = None
-            for s in sorted(pkeys, key=lambda s: s.updated_dt or datetime.min):  # noqa: DTZ901
+            for s in sorted(pkeys, key=lambda s: s.updated_dt or datetime.min):
                 if self.pending[s]:
                     # this CVE is still being processed
                     break

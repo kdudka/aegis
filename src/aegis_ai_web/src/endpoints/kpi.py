@@ -45,12 +45,12 @@ def canonical_feature(feature: str) -> str:
 def _parse_datetime_str(dt_str: str) -> datetime:
     """Parse datetime string to datetime object for sorting."""
     try:
-        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f")  # noqa: DTZ007
+        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S.%f")
     except ValueError:
         try:
-            return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")  # noqa: DTZ007
+            return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
         except ValueError:
-            return datetime.fromtimestamp(0)  # noqa: DTZ006
+            return datetime.fromtimestamp(0)
 
 
 def parse_components(value: str) -> list[str]:
