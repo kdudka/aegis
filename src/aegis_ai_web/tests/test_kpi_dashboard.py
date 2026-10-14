@@ -196,7 +196,7 @@ def test_feedback_keeps_latest_matching_programmatic_record(
             }
             for version, timestamp, score in [
                 ("0.9.1", "2026-08-01 00:00:00", "1"),
-                ("0.9.2", "2026-09-01 00:00:00", "0"),
+                ("0.9.2", "2026-09-15 00:00:00", "0"),
             ]
         ],
     )
