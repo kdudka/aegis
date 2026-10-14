@@ -181,11 +181,8 @@ def _build_cases(
     return cases
 
 
-class SuggestAffectedPackagesCase(Case):
+class SuggestAffectedPackagesCase(Case[str, Any, Any]):
     """Evaluation case: inputs = cve_id, expected_output = list of (purl, ps_update_stream) pairs."""
-
-    inputs: str
-    expected_output: list[tuple[str, str]]
 
 
 def _normalize_pair(purl: str, stream: str) -> tuple[str, str]:
@@ -229,11 +226,8 @@ class PackageOverlapEvaluator(Evaluator[str, SuggestAffectedPackagesModel]):
         return EvaluationReason(value=score, reason=reason)
 
 
-class LowQualityCase(Case):
+class LowQualityCase(Case[str, Any, Any]):
     """Evaluation case for CVEs with insufficient affects data."""
-
-    inputs: str
-    expected_output: SuggestAffectedPackagesModel
 
 
 async def suggest_affected_packages(cve_id: CVEID) -> SuggestAffectedPackagesModel:

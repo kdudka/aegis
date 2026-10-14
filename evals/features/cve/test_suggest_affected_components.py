@@ -309,11 +309,8 @@ def _build_cases(
     return cases
 
 
-class SuggestAffectedComponentsCase(Case):
+class SuggestAffectedComponentsCase(Case[str, Any, Any]):
     """Evaluation case: inputs = cve_id, expected_output = list of component names."""
-
-    inputs: str  # cve_id
-    expected_output: list[str]
 
 
 def _normalized_component_sets(names: list[str]) -> set[str]:
