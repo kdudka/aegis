@@ -37,7 +37,7 @@
 # Tool settings
 | Environment Variable                   | Description                           | Default Value            |
 |----------------------------------------|---------------------------------------|--------------------------|
-| `AEGIS_DEPTOPIA_URL`                   | Deptopia REST API host                | `https://localhost:8080` |
+| `AEGIS_BOMQ_URL`                       | bomq REST API host                    | `https://localhost:8080` |
 | `AEGIS_OSIDB_SERVER_URL`               | OSIDB REST API host                   | `https://localhost:8000` |
 | `AEGIS_OSIDB_RETRIEVE_EMBARGOED`       | Enable retrieving embargoed CVEs      | `false`                  |
 | `AEGIS_USE_CWE_TOOL_CONTEXT`           | Enable MITRE CWE tool                 | `true`                   |
@@ -52,7 +52,7 @@
 | `AEGIS_USE_MITRE_NVD_MCP_TOOL_CONTEXT` | Enable NVD MCP tool                   | `false`                  |
 | `NVD_API_KEY`                          | NVD API key (for NVD MCP tool)        |                          |
 | `AEGIS_USE_EXT_REFS_TOOL_CONTEXT`      | Enable external references tool (fetches content from CVE reference URLs on an allowlist of trusted domains) | `false` |
-| `AEGIS_USE_BUILD_SYSTEM_TOOL_CONTEXT`  | Enable build system tool (Brew/Deptopia binary RPM lookup for `SuggestAffectedPackages`) | `false` |
+| `AEGIS_USE_BUILD_SYSTEM_TOOL_CONTEXT`  | Enable build system tool (Brew/bomq binary RPM lookup for `SuggestAffectedPackages`) | `false` |
 | `AEGIS_USE_OSIDB_COMPONENT_TOOL_CONTEXT` | Enable OSIDB component tools (`component_count_tool` and `component_flaw_tool`) | `false` |
 | `AEGIS_USE_TAVILY_TOOL_CONTEXT`        | Enable Tavily web search tool         | `false`                  |
 | `TAVILY_API_KEY`                       | Tavily API key                        |                          |

@@ -1,6 +1,6 @@
 """Build system toolset for binary RPM subpackage enumeration.
 
-Queries the Deptopia REST API to resolve a source package + product stream
+Queries the bomq REST API to resolve a source package + product stream
 to a Brew build NVR, then uses the Koji/Brew API to list the binary RPM
 names produced by that build.
 """
@@ -23,7 +23,7 @@ from aegis_ai.toolsets.tools import BaseToolInput, BaseToolOutput
 
 logger = logging.getLogger(__name__)
 
-DEPTOPIA_API_PATH = "/api/v1/incoming/search"
+BOMQ_API_PATH = "/api/v0/search/builds"
 BREW_PROFILE = "brew"
 
 _EXCLUDED_RPM_PATTERNS = re.compile(
@@ -71,18 +71,23 @@ def _create_brew_session() -> koji.ClientSession:
     return koji.ClientSession(config["server"], session_opts)
 
 
-def _fetch_deptopia_builds(package: str) -> list[dict]:
-    """Query Deptopia for all builds of a package."""
-    base = get_settings().deptopia_url.rstrip("/")
-    params = urllib.parse.urlencode({"build_name": package, "strict_builds": "true"})
-    url = f"{base}{DEPTOPIA_API_PATH}?{params}"
+def _fetch_bomq_builds(package: str) -> list[dict]:
+    """Query bomq for all builds of a package."""
+    base = get_settings().bomq_url.rstrip("/")
+    params = urllib.parse.urlencode({"name": package, "strict": "true"})
+    url = f"{base}{BOMQ_API_PATH}?{params}"
     with urllib.request.urlopen(url, timeout=30) as resp:
         data = json.loads(resp.read())
     if not isinstance(data, dict):
-        raise TypeError(f"Deptopia returned {type(data).__name__}, expected object")
-    builds = data.get("Builds", [])
+        raise TypeError(f"bomq returned {type(data).__name__}, expected object")
+    builds = data.get("data", [])
     if not isinstance(builds, list):
-        raise TypeError(f"Deptopia 'Builds' is {type(builds).__name__}, expected list")
+        raise TypeError(f"bomq 'data' is {type(builds).__name__}, expected list")
+    for i, entry in enumerate(builds):
+        if not isinstance(entry, dict):
+            raise TypeError(
+                f"bomq 'data[{i}]' is {type(entry).__name__}, expected object"
+            )
     return builds
 
 
@@ -90,7 +95,7 @@ def _resolve_build_id(
     session: koji.ClientSession, builds: list[dict], ps_update_stream: str
 ) -> tuple[int, str] | None:
     """Find a build matching the stream and resolve it to a Koji build ID."""
-    matches = [b for b in builds if b.get("ps_update_stream") == ps_update_stream]
+    matches = [b for b in builds if b.get("stream_name") == ps_update_stream]
     if not matches:
         return None
     nvr = matches[0]["build_nvr"]
@@ -103,11 +108,11 @@ def _resolve_build_id(
 def _resolve_build_from_stream(
     session: koji.ClientSession, package: str, ps_update_stream: str
 ) -> tuple[int, str] | None:
-    """Query Deptopia for a build NVR, then resolve it to a Koji build ID.
+    """Query bomq for a build NVR, then resolve it to a Koji build ID.
 
     Returns (build_id, build_nvr) or None if no matching build is found.
     """
-    builds = _fetch_deptopia_builds(package)
+    builds = _fetch_bomq_builds(package)
     return _resolve_build_id(session, builds, ps_update_stream)
 
 
@@ -129,7 +134,7 @@ def _resolve_stream(
     builds: list[dict],
     ps_update_stream: str,
 ) -> ListBinaryRPMsOutput:
-    """Resolve one stream from pre-fetched Deptopia builds."""
+    """Resolve one stream from pre-fetched bomq builds."""
     try:
         resolved = _resolve_build_id(session, builds, ps_update_stream)
     except koji.GenericError as e:
@@ -186,27 +191,27 @@ def _lookup_binary_rpms(package: str, ps_update_stream: str) -> ListBinaryRPMsOu
             )
 
         try:
-            builds = _fetch_deptopia_builds(package)
+            builds = _fetch_bomq_builds(package)
         except urllib.error.HTTPError as e:
             return ListBinaryRPMsOutput(
                 package=package,
                 ps_update_stream=ps_update_stream,
                 status="error",
-                error_message=f"Deptopia API error: {e.code} {e.reason}",
+                error_message=f"bomq API error: {e.code} {e.reason}",
             )
         except urllib.error.URLError as e:
             return ListBinaryRPMsOutput(
                 package=package,
                 ps_update_stream=ps_update_stream,
                 status="error",
-                error_message=f"Deptopia API error: {e.reason}",
+                error_message=f"bomq API error: {e.reason}",
             )
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
             return ListBinaryRPMsOutput(
                 package=package,
                 ps_update_stream=ps_update_stream,
                 status="error",
-                error_message=f"Deptopia response error: {e}",
+                error_message=f"bomq response error: {e}",
             )
 
         return _resolve_stream(session, package, builds, ps_update_stream)
@@ -215,7 +220,7 @@ def _lookup_binary_rpms(package: str, ps_update_stream: str) -> ListBinaryRPMsOu
 def _lookup_binary_rpms_batch(
     package: str, streams: list[str]
 ) -> list[ListBinaryRPMsOutput]:
-    """Batch lookup: one Deptopia request per package, one Brew session.
+    """Batch lookup: one bomq request per package, one Brew session.
 
     Acquires the Brew semaphore once for the entire batch so that a
     single package with many streams does not hold multiple slots.
@@ -235,14 +240,14 @@ def _lookup_binary_rpms_batch(
             ]
 
         try:
-            builds = _fetch_deptopia_builds(package)
+            builds = _fetch_bomq_builds(package)
         except urllib.error.HTTPError as e:
             return [
                 ListBinaryRPMsOutput(
                     package=package,
                     ps_update_stream=s,
                     status="error",
-                    error_message=f"Deptopia API error: {e.code} {e.reason}",
+                    error_message=f"bomq API error: {e.code} {e.reason}",
                 )
                 for s in streams
             ]
@@ -252,7 +257,7 @@ def _lookup_binary_rpms_batch(
                     package=package,
                     ps_update_stream=s,
                     status="error",
-                    error_message=f"Deptopia API error: {e.reason}",
+                    error_message=f"bomq API error: {e.reason}",
                 )
                 for s in streams
             ]
@@ -262,7 +267,7 @@ def _lookup_binary_rpms_batch(
                     package=package,
                     ps_update_stream=s,
                     status="error",
-                    error_message=f"Deptopia response error: {e}",
+                    error_message=f"bomq response error: {e}",
                 )
                 for s in streams
             ]

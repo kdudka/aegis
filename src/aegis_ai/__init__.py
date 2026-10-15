@@ -230,8 +230,8 @@ class AppSettings(BaseSettings):
     # osidb-bot KPI cache
     bot_kpi_cache_dir: str = os.getenv("AEGIS_BOT_KPI_CACHE_DIR", "")
 
-    # Deptopia
-    deptopia_url: str = os.getenv("AEGIS_DEPTOPIA_URL", "https://localhost:8080")
+    # bomq
+    bomq_url: str = os.getenv("AEGIS_BOMQ_URL", "https://localhost:8080")
 
     # OSIDB
     osidb_server_url: str = os.getenv(

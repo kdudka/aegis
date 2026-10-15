@@ -49,7 +49,7 @@ jobs:
       AEGIS_USE_KERNEL_CLASSIFIER: ${{ vars.AEGIS_USE_KERNEL_CLASSIFIER }}
       AEGIS_USE_LINUX_CVE_TOOL_CONTEXT: ${{ vars.AEGIS_USE_LINUX_CVE_TOOL_CONTEXT }}
 
-      # build system (Brew/Deptopia binary RPM lookup)
+      # build system (Brew/bomq binary RPM lookup)
       AEGIS_USE_BUILD_SYSTEM_TOOL_CONTEXT: "true"
 
       # external references

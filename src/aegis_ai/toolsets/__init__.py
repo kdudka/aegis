@@ -201,7 +201,7 @@ if get_settings().use_linux_cve_tool:
 
 kernel_extra_toolset = CombinedToolset(kernel_extra_toolset_list)
 
-# Build-system tools (Brew/Deptopia binary RPM lookup) for per-run injection
+# Build-system tools (Brew/bomq binary RPM lookup) for per-run injection
 # into SuggestAffectedPackages.
 build_system_toolset_list: list[AbstractToolset[Any]] = []
 
