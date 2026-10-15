@@ -1,10 +1,8 @@
 {
-    "status": "success",
-    "error_message": null,
+    "status": "not_found",
+    "error_message": "No builds found for package 'glibc32' in stream 'rhel-br-9.9'",
     "package": "glibc32",
     "ps_update_stream": "rhel-br-9.9",
-    "binary_rpms": [
-        "glibc32"
-    ],
-    "build_nvr": "glibc32-2.32-1.1.el9.4"
+    "binary_rpms": [],
+    "build_nvr": null
 }

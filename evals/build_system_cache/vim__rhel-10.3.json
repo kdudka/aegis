@@ -1,16 +1,8 @@
 {
-    "status": "success",
-    "error_message": null,
+    "status": "not_found",
+    "error_message": "No builds found for package 'vim' in stream 'rhel-10.3'",
     "package": "vim",
     "ps_update_stream": "rhel-10.3",
-    "binary_rpms": [
-        "vim-X11",
-        "vim-common",
-        "vim-data",
-        "vim-enhanced",
-        "vim-filesystem",
-        "vim-minimal",
-        "xxd"
-    ],
-    "build_nvr": "vim-9.1.083-9.el10_2.12"
+    "binary_rpms": [],
+    "build_nvr": null
 }
