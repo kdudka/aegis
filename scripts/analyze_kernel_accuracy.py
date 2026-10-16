@@ -8,9 +8,10 @@ Usage:
     uv run python scripts/analyze_kernel_accuracy.py
     uv run python scripts/analyze_kernel_accuracy.py --gold path/to/gold.tsv
     uv run python scripts/analyze_kernel_accuracy.py --fresh --jobs 4
+    uv run python scripts/analyze_kernel_accuracy.py --local --jobs 4
 
 Requires: VPN + Kerberos ticket (kinit), AEGIS_OSIDB_SERVER_URL env var.
-With --fresh: also requires AEGIS_LLM_HOST, AEGIS_LLM_MODEL, and an LLM API key.
+With --fresh or --local: also requires AEGIS_LLM_HOST, AEGIS_LLM_MODEL, and an LLM API key.
 """
 
 from __future__ import annotations
@@ -43,14 +44,34 @@ INCLUDE_FIELDS_FRESH = "cve_id,impact,cvss_scores,classification"
 
 def load_cve_ids(gold_path: Path) -> list[str]:
     """Read CVE IDs from the first column of a TSV file."""
-    cves: list[str] = []
+    return [e["cve_id"] for e in load_gold(gold_path)]
+
+
+def load_gold(gold_path: Path) -> list[dict]:
+    """Parse gold.tsv into a list of dicts with cve_id, expected_impact, expected_kpanic."""
+    entries: list[dict] = []
     with open(gold_path, newline="", encoding="utf-8") as f:
         reader = csv.reader(f, delimiter="\t")
         next(reader, None)
         for row in reader:
-            if row and row[0].strip().startswith("CVE-"):
-                cves.append(row[0].strip())
-    return cves
+            if not row or not row[0].strip().startswith("CVE-"):
+                continue
+            cve_id = row[0].strip()
+            impact_raw = row[1].strip() if len(row) > 1 else ""
+            if impact_raw.endswith("_KPANIC"):
+                impact = impact_raw.removesuffix("_KPANIC")
+                kpanic = True
+            else:
+                impact = impact_raw
+                kpanic = len(row) > 2 and row[2].strip().upper() == "YES"
+            entries.append(
+                {
+                    "cve_id": cve_id,
+                    "expected_impact": impact.upper(),
+                    "expected_kpanic": kpanic,
+                }
+            )
+    return entries
 
 
 def get_latest_suggestion(aegis_meta: dict, field: str) -> str | None:
@@ -226,6 +247,65 @@ async def _fetch_and_suggest_one(
     }
 
 
+async def _local_suggest_one(
+    gold_entry: dict,
+    index: int,
+    total: int,
+    sem: asyncio.Semaphore,
+    output_dir: Path | None = None,
+) -> dict:
+    """Run SuggestImpact and compare against gold.tsv expected values."""
+    from aegis_ai.agents import rh_feature_agent
+    from aegis_ai.features.cve import SuggestImpact
+
+    cve_id = gold_entry["cve_id"]
+    async with sem:
+        log.info("[%d/%d] %s (local)", index, total, cve_id)
+        try:
+            feature = SuggestImpact(rh_feature_agent)
+            result = await feature.exec(cve_id)
+            output = result.output
+            suggested_impact = (output.impact or "").upper()
+            suggested_vector = output.cvss3_vector
+            suggested_score = (
+                _score_from_vector(suggested_vector) if suggested_vector else None
+            )
+            suggested_kpanic = "kpanic" in output._flags
+        except Exception as exc:
+            log.warning("SuggestImpact failed for %s: %s", cve_id, exc)
+            return {"cve_id": cve_id, "error": f"suggest-impact: {exc}"}
+
+        if output_dir is not None:
+            dump_path = output_dir / f"{cve_id}-suggest-impact.json"
+            dump_path.write_text(
+                output.model_dump_json(indent=2) + "\n", encoding="utf-8"
+            )
+            log.info("  -> %s", dump_path)
+
+    expected_impact = gold_entry["expected_impact"]
+    diff = (
+        classify_diff(suggested_impact, expected_impact)
+        if suggested_impact and expected_impact
+        else None
+    )
+
+    return {
+        "cve_id": cve_id,
+        "processed": None,
+        "classification": "",
+        "osidb_impact": expected_impact,
+        "suggested_impact": suggested_impact,
+        "diff": diff or "",
+        "rh_cvss_score": None,
+        "suggested_cvss_score": suggested_score,
+        "cvss_diff": None,
+        "rh_cvss_vector": "",
+        "suggested_cvss_vector": suggested_vector or "",
+        "expected_kpanic": gold_entry["expected_kpanic"],
+        "suggested_kpanic": suggested_kpanic,
+    }
+
+
 async def fetch_all(
     session: Any,
     cve_ids: list[str],
@@ -253,11 +333,32 @@ async def fetch_all(
     return list(results)
 
 
+async def run_local(
+    gold_entries: list[dict],
+    jobs: int,
+    output_dir: Path | None = None,
+) -> list[dict]:
+    """Run SuggestImpact locally and compare against gold.tsv."""
+    sem = asyncio.Semaphore(jobs)
+    total = len(gold_entries)
+    tasks = [
+        _local_suggest_one(entry, i, total, sem, output_dir)
+        for i, entry in enumerate(gold_entries, 1)
+    ]
+    results = await asyncio.gather(*tasks)
+    errors = sum(1 for r in results if "error" in r)
+    if errors:
+        log.warning("%d/%d CVEs failed", errors, total)
+    return list(results)
+
+
 def print_report(results: list[dict]) -> None:
     """Print the accuracy report to stdout."""
     valid = [r for r in results if "error" not in r]
     errored = [r for r in results if "error" in r]
     show_proc = any(r.get("processed") is not None for r in valid)
+    show_kpanic = any("expected_kpanic" in r for r in valid)
+    impact_label = "Gold" if show_kpanic else "OSIDB"
 
     print("\n" + "=" * 130)
     print("AEGIS SUGGEST-IMPACT ACCURACY REPORT — Kernel CVEs")
@@ -267,17 +368,24 @@ def print_report(results: list[dict]) -> None:
     if show_proc:
         header = (
             f"{'CVE':<20} {'Proc':<5} {'Classification':<35} "
-            f"{'OSIDB':<12} {'Aegis':<12} {'Diff':<16} "
+            f"{impact_label:<12} {'Aegis':<12} {'Diff':<16} "
             f"{'RH CVSS':<8} {'Aegis CVSS':<11} {'CVSS Diff':<10}"
+        )
+    elif show_kpanic:
+        header = (
+            f"{'CVE':<20} "
+            f"{impact_label:<12} {'Aegis':<12} {'Diff':<16} "
+            f"{'Exp.KP':<7} {'Sug.KP':<7}"
+            f"{'Aegis CVSS':<11}"
         )
     else:
         header = (
             f"{'CVE':<20} {'Classification':<35} "
-            f"{'OSIDB':<12} {'Aegis':<12} {'Diff':<16} "
+            f"{impact_label:<12} {'Aegis':<12} {'Diff':<16} "
             f"{'RH CVSS':<8} {'Aegis CVSS':<11} {'CVSS Diff':<10}"
         )
     print(f"\n{header}")
-    print("-" * 140)
+    print("-" * len(header))
 
     for r in valid:
         rh_s = f"{r['rh_cvss_score']:.1f}" if r["rh_cvss_score"] is not None else "—"
@@ -293,6 +401,14 @@ def print_report(results: list[dict]) -> None:
                 f"{r['cve_id']:<20} {proc:<5} {r['classification']:<35} "
                 f"{r['osidb_impact']:<12} {r['suggested_impact']:<12} "
                 f"{r['diff']:<16} {rh_s:<8} {ae_s:<11} {cd:<10}"
+            )
+        elif show_kpanic:
+            ekp = "YES" if r.get("expected_kpanic") else "NO"
+            skp = "YES" if r.get("suggested_kpanic") else "NO"
+            print(
+                f"{r['cve_id']:<20} "
+                f"{r['osidb_impact']:<12} {r['suggested_impact']:<12} "
+                f"{r['diff']:<16} {ekp:<7} {skp:<7}{ae_s:<11}"
             )
         else:
             print(
@@ -366,6 +482,37 @@ def print_report(results: list[dict]) -> None:
                 print(f"  {count:>6}", end="")
             print()
 
+    # Kpanic accuracy
+    kpanic_cases = [r for r in valid if "expected_kpanic" in r]
+    if kpanic_cases:
+        kp_matches = [
+            r for r in kpanic_cases if r["expected_kpanic"] == r.get("suggested_kpanic")
+        ]
+        kp_fp = [
+            r
+            for r in kpanic_cases
+            if r.get("suggested_kpanic") and not r["expected_kpanic"]
+        ]
+        kp_fn = [
+            r
+            for r in kpanic_cases
+            if not r.get("suggested_kpanic") and r["expected_kpanic"]
+        ]
+        print(
+            f"Kpanic accuracy:         {len(kp_matches)}/{len(kpanic_cases)}"
+            f" ({100 * len(kp_matches) / len(kpanic_cases):.1f}%)"
+        )
+        if kp_fp:
+            print(
+                f"  False positives:       {len(kp_fp)} "
+                f"({', '.join(r['cve_id'] for r in kp_fp)})"
+            )
+        if kp_fn:
+            print(
+                f"  False negatives:       {len(kp_fn)} "
+                f"({', '.join(r['cve_id'] for r in kp_fn)})"
+            )
+
     # CVSS score MAE
     cvss_diffs: list[float] = []
     for r in valid:
@@ -378,29 +525,35 @@ def print_report(results: list[dict]) -> None:
 
 
 async def async_main(args: argparse.Namespace) -> None:
-    cve_ids = load_cve_ids(args.gold)
-    if not cve_ids:
+    gold_entries = load_gold(args.gold)
+    if not gold_entries:
         print("ERROR: No CVE IDs found in gold file", file=sys.stderr)
         sys.exit(1)
 
-    if args.fresh:
+    if args.fresh or args.local:
         from aegis_ai import config_logging
 
         config_logging()
 
+    cve_ids = [e["cve_id"] for e in gold_entries]
     log.info("Loaded %d CVE IDs from %s", len(cve_ids), args.gold)
-    log.info(
-        "Connecting to OSIDB at %s (jobs=%d, fresh=%s)",
-        args.osidb_url,
-        args.jobs,
-        args.fresh,
-    )
 
-    session = osidb_bindings.new_session(osidb_server_uri=args.osidb_url)
-    output_dir = args.gold.resolve().parent if args.fresh else None
-    results = await fetch_all(
-        session, cve_ids, args.jobs, fresh=args.fresh, output_dir=output_dir
-    )
+    if args.local:
+        log.info("Running SuggestImpact locally (jobs=%d)", args.jobs)
+        output_dir = args.gold.resolve().parent
+        results = await run_local(gold_entries, args.jobs, output_dir)
+    else:
+        log.info(
+            "Connecting to OSIDB at %s (jobs=%d, fresh=%s)",
+            args.osidb_url,
+            args.jobs,
+            args.fresh,
+        )
+        session = osidb_bindings.new_session(osidb_server_uri=args.osidb_url)
+        output_dir = args.gold.resolve().parent if args.fresh else None
+        results = await fetch_all(
+            session, cve_ids, args.jobs, fresh=args.fresh, output_dir=output_dir
+        )
     print_report(results)
 
 
@@ -441,6 +594,11 @@ def main() -> None:
         "--fresh",
         action="store_true",
         help="Run suggest-impact live instead of reading aegis_meta from OSIDB",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Run suggest-impact locally and compare against gold.tsv expected values",
     )
     args = parser.parse_args()
 
