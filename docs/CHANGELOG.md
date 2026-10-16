@@ -5,6 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.10.1] - 2026-10-16
+
+### Changed
+- migrated build system toolset from Deptopia to bomq [\[AEGIS-525\]](https://redhat.atlassian.net/browse/AEGIS-525)
+- retrained kernel classifier model with updated dataset [\[AEGIS-512\]](https://redhat.atlassian.net/browse/AEGIS-512)
+
+### Added
+- infer `kpanic` flag from CVSS vector when the kernel classifier is unavailable [\[AEGIS-532\]](https://redhat.atlassian.net/browse/AEGIS-532)
+- added `--markdown` / `-m` flag to CLI for human-readable output with backtick-wrapped CVSS metric tokens [\[AEGIS-532\]](https://redhat.atlassian.net/browse/AEGIS-532)
+- added `--local` mode to `analyze_kernel_accuracy.py` for offline evaluation [\[AEGIS-532\]](https://redhat.atlassian.net/browse/AEGIS-532)
+- exposed bot history and common dashboard filters in KPI endpoints [\[AEGIS-513\]](https://redhat.atlassian.net/browse/AEGIS-513)
+
+### Fixed
+- fixed CLI JSON output corruption caused by `rich` text wrapping [\[AEGIS-532\]](https://redhat.atlassian.net/browse/AEGIS-532)
+- fixed delegated Kerberos authentication: isolated per-request credentials, handled ccache ownership, and paginated bearer-authenticated requests [\[AEGIS-513\]](https://redhat.atlassian.net/browse/AEGIS-513)
+- fixed KPI endpoints to forward user credentials to OSIDB queries [\[AEGIS-513\]](https://redhat.atlassian.net/browse/AEGIS-513)
+- retry on `ModelAPIError` (server disconnect), HTTP 429 (quota exhaustion), and LLM timeouts; lowered default `AEGIS_LLM_TIMEOUT_SECS` from 300s to 200s [\[AEGIS-530\]](https://redhat.atlassian.net/browse/AEGIS-530)
+
+
 ## [0.10.0] - 2026-10-08
 
 ### Changed
