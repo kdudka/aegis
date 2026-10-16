@@ -105,6 +105,23 @@ def _generic_markdown(output: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _split_cvss_metrics(vector: str) -> list[str]:
+    """Extract individual metric tokens (e.g. ``AV:L``) from a CVSS vector."""
+    import re
+
+    return re.findall(r"[A-Z]+:[A-Z]", vector)
+
+
+def _backtick_metrics(text: str, metrics: list[str]) -> str:
+    """Wrap every occurrence of a CVSS metric token in backticks."""
+    import re
+
+    if not metrics:
+        return text
+    pattern = re.compile("|".join(re.escape(m) for m in metrics))
+    return pattern.sub(lambda m: f"`{m.group()}`", text)
+
+
 def _format_suggest_impact(output: Any) -> str:
     parts: list[str] = []
 
@@ -116,13 +133,16 @@ def _format_suggest_impact(output: Any) -> str:
 
     parts.append(f"**Impact**: {output.impact}")
     parts.append(f"**CVSS Score**: {output.cvss3_score}")
+
+    metrics: list[str] = []
     if output.cvss3_vector:
+        metrics = _split_cvss_metrics(str(output.cvss3_vector))
         parts.append(f"**CVSS Vector**: {output.cvss3_vector}")
 
     parts.append("")
     parts.append("## Explanation")
     parts.append("")
-    parts.append(output.explanation)
+    parts.append(_backtick_metrics(output.explanation, metrics))
 
     parts.append("")
     parts.append(_meta_footer(output))
