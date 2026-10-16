@@ -9,18 +9,12 @@ import sys
 from datetime import UTC
 
 import click
-from rich.console import Console
-from rich.panel import Panel
-from rich.rule import Rule
-from rich.text import Text
 
 from aegis_ai import check_llm_status, config_logging, get_settings
 from aegis_ai.data_models import CVEID
 from aegis_ai.features import component, cve
 from aegis_ai.features.data_models import AegisAnswer
 from aegis_ai_cli import feature_agent, print_version
-
-console = Console()
 
 if "public" in feature_agent:
     from aegis_ai.agents import public_feature_agent
@@ -89,8 +83,7 @@ def search_plain(query):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output)
+        print(result.output)
 
 
 @aegis_cli.command()
@@ -106,8 +99,7 @@ def search(query):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output)
+        print(result.output)
 
 
 @aegis_cli.command()
@@ -123,8 +115,7 @@ def identify_pii(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 def _build_diagnostics(output) -> dict:
@@ -180,7 +171,7 @@ def _print_impact_diagnostics(output) -> None:
 
     llm_raw = data.get("llm_raw_assessment")
     if llm_raw:
-        lines.append("[bold]LLM Raw Assessment[/bold]")
+        lines.append("LLM Raw Assessment")
         lines.append(
             f"  Impact: {llm_raw['impact'] or '?'} | Score: {llm_raw['score'] or '?'}"
             f" | Vector: {llm_raw['vector'] or '?'}"
@@ -189,7 +180,7 @@ def _print_impact_diagnostics(output) -> None:
 
     clf = data.get("kernel_classifier")
     if clf:
-        lines.append("[bold]Kernel Classifier[/bold]")
+        lines.append("Kernel Classifier")
         lines.append(
             f"  XGBoost prediction: {clf['xgboost_prediction'] or '?'}"
             f" | After cascade rules: {clf['after_cascade'] or '?'}"
@@ -215,7 +206,7 @@ def _print_impact_diagnostics(output) -> None:
 
     flags = data.get("patch_flags")
     if flags:
-        lines.append("[bold]Patch Flags[/bold]")
+        lines.append("Patch Flags")
         lines.append(f"  {', '.join(flags)}")
         html_supp = data.get("html_supplemented_flags")
         if html_supp:
@@ -224,13 +215,13 @@ def _print_impact_diagnostics(output) -> None:
 
     trace = data.get("reconciliation_trace")
     if trace:
-        lines.append("[bold]Reconciliation[/bold]")
+        lines.append("Reconciliation")
         for part in trace.split("; "):
             lines.append(f"  {part}")
         lines.append("")
 
     pp = data["post_processing"]
-    lines.append("[bold]Post-Processing[/bold]")
+    lines.append("Post-Processing")
     if pp["impact_changed"]:
         lines.append(
             f"  Impact changed: {pp['original_impact']} -> {pp['final_impact']}"
@@ -241,12 +232,8 @@ def _print_impact_diagnostics(output) -> None:
         f"  Explanation revised: {'yes' if pp['explanation_revised'] else 'no'}"
     )
 
-    panel = Panel(
-        Text.from_markup("\n".join(lines)),
-        title="Pipeline Diagnostics",
-        border_style="dim",
-    )
-    console.print(panel)
+    print("\n--- Pipeline Diagnostics ---", file=sys.stderr)
+    print("\n".join(lines), file=sys.stderr)
 
 
 @aegis_cli.command()
@@ -271,15 +258,14 @@ def suggest_impact(cve_id, verbose, include_diagnostics):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
         if include_diagnostics:
             import json
 
             output_dict = json.loads(result.output.model_dump_json())
             output_dict["diagnostics"] = _build_diagnostics(result.output)
-            console.print(json.dumps(output_dict, indent=2))
+            print(json.dumps(output_dict, indent=2))
         else:
-            console.print(result.output.model_dump_json(indent=2))
+            print(result.output.model_dump_json(indent=2))
         if verbose and not include_diagnostics:
             _print_impact_diagnostics(result.output)
 
@@ -297,8 +283,7 @@ def suggest_cwe(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -314,8 +299,7 @@ def suggest_description(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -331,8 +315,7 @@ def suggest_statement(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -348,8 +331,7 @@ def cvss_diff(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -366,8 +348,7 @@ def quality_review(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -383,8 +364,7 @@ def suggest_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -400,8 +380,7 @@ def suggest_affected_packages(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -417,8 +396,7 @@ def query_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
@@ -434,8 +412,7 @@ def component_intelligence(component_name):
 
     result = asyncio.run(_doit())
     if result:
-        console.print(Rule())
-        console.print(result.output.model_dump_json(indent=2))
+        print(result.output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
