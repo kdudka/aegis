@@ -102,6 +102,10 @@ def search(query):
         print(result.output)
 
 
+def _print_output(output) -> None:
+    print(output.model_dump_json(indent=2))
+
+
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
 def identify_pii(cve_id):
@@ -115,7 +119,7 @@ def identify_pii(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 def _build_diagnostics(output) -> dict:
@@ -265,7 +269,7 @@ def suggest_impact(cve_id, verbose, include_diagnostics):
             output_dict["diagnostics"] = _build_diagnostics(result.output)
             print(json.dumps(output_dict, indent=2))
         else:
-            print(result.output.model_dump_json(indent=2))
+            _print_output(result.output)
         if verbose and not include_diagnostics:
             _print_impact_diagnostics(result.output)
 
@@ -283,7 +287,7 @@ def suggest_cwe(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -299,7 +303,7 @@ def suggest_description(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -315,7 +319,7 @@ def suggest_statement(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -331,7 +335,7 @@ def cvss_diff(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -348,7 +352,7 @@ def quality_review(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -364,7 +368,7 @@ def suggest_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -380,7 +384,7 @@ def suggest_affected_packages(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -396,7 +400,7 @@ def query_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
@@ -412,7 +416,7 @@ def component_intelligence(component_name):
 
     result = asyncio.run(_doit())
     if result:
-        print(result.output.model_dump_json(indent=2))
+        _print_output(result.output)
 
 
 @aegis_cli.command()
