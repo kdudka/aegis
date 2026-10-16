@@ -553,6 +553,11 @@ class SuggestImpact(Feature):
             result.output._flags = sorted(
                 {_FLAG_TO_LABEL[f] for f in active if f in _FLAG_TO_LABEL}
             )
+        elif is_kernel:
+            # without classifier map `A:H` in CVSS to `kpanic` for kernel CVEs
+            cvss3_vector = result.output.cvss3_vector
+            if cvss3_vector and "A:H" in cvss3_vector:
+                result.output._flags = ["kpanic"]
 
         return result
 
