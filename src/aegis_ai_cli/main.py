@@ -102,13 +102,21 @@ def search(query):
         print(result.output)
 
 
-def _print_output(output) -> None:
-    print(output.model_dump_json(indent=2))
+def _print_output(output, *, markdown: bool = False) -> None:
+    if markdown:
+        from aegis_ai_cli.formatters import format_markdown
+
+        print(format_markdown(output))
+    else:
+        print(output.model_dump_json(indent=2))
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def identify_pii(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def identify_pii(cve_id, markdown):
     """
     Identify PII contained in CVE record.
     """
@@ -119,7 +127,7 @@ def identify_pii(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 def _build_diagnostics(output) -> dict:
@@ -251,7 +259,10 @@ def _print_impact_diagnostics(output) -> None:
     is_flag=True,
     help="Include pipeline diagnostics in JSON output.",
 )
-def suggest_impact(cve_id, verbose, include_diagnostics):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_impact(cve_id, verbose, include_diagnostics, markdown):
     """
     Suggest overall impact of CVE.
     """
@@ -262,21 +273,24 @@ def suggest_impact(cve_id, verbose, include_diagnostics):
 
     result = asyncio.run(_doit())
     if result:
-        if include_diagnostics:
+        if include_diagnostics and not markdown:
             import json
 
             output_dict = json.loads(result.output.model_dump_json())
             output_dict["diagnostics"] = _build_diagnostics(result.output)
             print(json.dumps(output_dict, indent=2))
         else:
-            _print_output(result.output)
-        if verbose and not include_diagnostics:
+            _print_output(result.output, markdown=markdown)
+        if verbose and (markdown or not include_diagnostics):
             _print_impact_diagnostics(result.output)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def suggest_cwe(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_cwe(cve_id, markdown):
     """
     Suggest CWE.
     """
@@ -287,12 +301,15 @@ def suggest_cwe(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def suggest_description(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_description(cve_id, markdown):
     """
     Suggest CVE description text.
     """
@@ -303,12 +320,15 @@ def suggest_description(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def suggest_statement(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_statement(cve_id, markdown):
     """
     Suggest CVE statement text.
     """
@@ -319,12 +339,15 @@ def suggest_statement(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def cvss_diff(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def cvss_diff(cve_id, markdown):
     """
     CVSS Diff explainer.
     """
@@ -335,12 +358,15 @@ def cvss_diff(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def quality_review(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def quality_review(cve_id, markdown):
     """
     Review quality of CVE flaw content against a weighted quality rubric (0.0-1.0 scale).
     """
@@ -352,12 +378,15 @@ def quality_review(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def suggest_affected_components(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_affected_components(cve_id, markdown):
     """
     Suggest affected components for a CVE.
     """
@@ -368,12 +397,15 @@ def suggest_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def suggest_affected_packages(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def suggest_affected_packages(cve_id, markdown):
     """
     Suggest affected source RPM packages for a CVE (LLM-driven).
     """
@@ -384,12 +416,15 @@ def suggest_affected_packages(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("cve_id", type=CVEID)
-def query_affected_components(cve_id):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def query_affected_components(cve_id, markdown):
     """
     Query OSIDB for affected components (deterministic, no LLM).
     """
@@ -400,12 +435,15 @@ def query_affected_components(cve_id):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
 @click.argument("component_name", type=str)
-def component_intelligence(component_name):
+@click.option(
+    "--markdown", "-m", is_flag=True, help="Output as markdown instead of JSON."
+)
+def component_intelligence(component_name, markdown):
     """
     Component intelligence.
     """
@@ -416,7 +454,7 @@ def component_intelligence(component_name):
 
     result = asyncio.run(_doit())
     if result:
-        _print_output(result.output)
+        _print_output(result.output, markdown=markdown)
 
 
 @aegis_cli.command()
