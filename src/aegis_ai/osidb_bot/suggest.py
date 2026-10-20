@@ -174,7 +174,7 @@ async def suggest_components(
 
     # record suggested ecosystems in aegis_meta if any
     if output.ecosystems:
-        update_field(flaw_data, ts, "_ecosystems", output, src="ecosystems")
+        changed |= update_field(flaw_data, ts, "_ecosystems", output, src="ecosystems")
 
     return changed
 
