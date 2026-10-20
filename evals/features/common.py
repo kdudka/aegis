@@ -256,12 +256,14 @@ def _format_suggest_affected_components_output(val: Any) -> str:
     return " ".join(parts) if parts else str(val)
 
 
-def _score_with_threshold_indicator(value: float) -> str:
-    """Format score with pass/fail indicator based on MIN_SCORE_THRESHOLD."""
+def _score_with_threshold_indicator(
+    value: float, threshold: float = MIN_SCORE_THRESHOLD
+) -> str:
+    """Format score with pass/fail indicator based on the given threshold."""
     if isinstance(value, float) and math.isnan(value):
         return "NaN [red]✗[/]"
     formatted = default_render_number(value)
-    indicator = "[green]✔[/]" if value >= MIN_SCORE_THRESHOLD else "[red]✗[/]"
+    indicator = "[green]✔[/]" if value >= threshold else "[red]✗[/]"
     return f"{formatted} {indicator}"
 
 
@@ -270,8 +272,13 @@ def _build_score_configs(report: EvaluationReport) -> dict[str, RenderNumberConf
     score_names: set[str] = set()
     for case in report.cases:
         score_names.update(case.scores.keys())
+
+    def _make_formatter(name: str):
+        threshold = EVALUATOR_SCORE_THRESHOLDS.get(name, MIN_SCORE_THRESHOLD)
+        return lambda v: _score_with_threshold_indicator(v, threshold)
+
     return {
-        name: RenderNumberConfig(value_formatter=_score_with_threshold_indicator)
+        name: RenderNumberConfig(value_formatter=_make_formatter(name))
         for name in score_names
     }
 
