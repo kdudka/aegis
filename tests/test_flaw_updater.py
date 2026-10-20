@@ -367,6 +367,81 @@ def test_update_field_skipped_both_metrics_low():
     assert entry["skip_reason"] == "confidence"
 
 
+def test_update_field_force_overwrite_bypasses_metrics():
+    """force_overwrite_of bypasses metrics check when current value matches."""
+    flaw_data = _minimal_flaw_data()
+    assert flaw_data["impact"] == ""
+    output = cast(
+        AegisAnswer,
+        SimpleNamespace(
+            impact="LOW",
+            explanation="test",
+            data_quality=LOW_QUALITY,
+            confidence=LOW_CONFIDENCE,
+            tools_used=[],
+        ),
+    )
+
+    changed = update_field(flaw_data, TS, "impact", output, force_overwrite_of="")
+
+    assert changed == {"impact"}
+    assert flaw_data["impact"] == "LOW"
+
+    entries = flaw_data["aegis_meta"]["impact"]
+    assert len(entries) == 1
+    assert entries[0]["type"] == "AI-Bot"
+
+
+def test_update_field_force_overwrite_no_match_checks_metrics():
+    """force_overwrite_of does not bypass metrics when current value differs."""
+    flaw_data = _minimal_flaw_data()
+    flaw_data["impact"] = "MODERATE"
+    output = cast(
+        AegisAnswer,
+        SimpleNamespace(
+            impact="LOW",
+            explanation="test",
+            data_quality=LOW_QUALITY,
+            confidence=LOW_CONFIDENCE,
+            tools_used=[],
+        ),
+    )
+
+    changed = update_field(flaw_data, TS, "impact", output, force_overwrite_of="")
+
+    assert changed == {"aegis_meta"}
+    assert flaw_data["impact"] == "MODERATE"
+
+    entries = flaw_data["aegis_meta"]["impact"]
+    assert len(entries) == 1
+    assert entries[0]["type"] == "AI-Bot-Skipped"
+
+
+def test_update_field_force_overwrite_none_checks_metrics():
+    """force_overwrite_of=None (default) always checks metrics."""
+    flaw_data = _minimal_flaw_data()
+    assert flaw_data["impact"] == ""
+    output = cast(
+        AegisAnswer,
+        SimpleNamespace(
+            impact="LOW",
+            explanation="test",
+            data_quality=LOW_QUALITY,
+            confidence=LOW_CONFIDENCE,
+            tools_used=[],
+        ),
+    )
+
+    changed = update_field(flaw_data, TS, "impact", output)
+
+    assert changed == {"aegis_meta"}
+    assert flaw_data["impact"] == ""
+
+    entries = flaw_data["aegis_meta"]["impact"]
+    assert len(entries) == 1
+    assert entries[0]["type"] == "AI-Bot-Skipped"
+
+
 @pytest.mark.asyncio
 @patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
 async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
@@ -419,10 +494,11 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
     result = await updater.apply_suggestions()
     assert result is False
 
-    assert updater.updated_fields == {"aegis_meta"}
+    # impact is written even with low metrics (force_overwrite_of="" on empty field)
+    assert updater.updated_fields == {"aegis_meta", "impact"}
 
     aegis_meta = flaw_data["aegis_meta"]
-    for field in ("components", "title", "cve_description", "cwe_id", "impact"):
+    for field in ("components", "title", "cve_description", "cwe_id"):
         assert field in aegis_meta, f"aegis_meta missing skipped entry for {field!r}"
         entries = aegis_meta[field]
         assert len(entries) >= 1
@@ -433,6 +509,12 @@ async def test_flaw_updater_all_skipped_records_aegis_meta(mock_exec_feature):
             assert entry["data_quality"] == LOW_QUALITY
             assert entry["confidence"] == LOW_CONFIDENCE
             datetime.fromisoformat(entry["timestamp"])
+
+    # impact was written despite low metrics, so its aegis_meta entry is AI-Bot
+    impact_entries = aegis_meta["impact"]
+    assert len(impact_entries) == 1
+    assert impact_entries[0]["type"] == "AI-Bot"
+    assert flaw_data["impact"] == "LOW"
 
 
 @pytest.mark.asyncio

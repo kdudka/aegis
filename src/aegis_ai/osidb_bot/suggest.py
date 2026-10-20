@@ -113,11 +113,16 @@ def update_field(
     output: AegisAnswer,
     src: str | None = None,
     value: str | None = None,
+    force_overwrite_of: Any = None,
 ) -> set[str]:
     assert (not src) or (not value)
-
     cve_id = flaw_data.get("cve_id", "")
-    skip_reason = check_metrics(dst, cve_id, output)
+
+    # if force_overwrite_of is specified and matches flaw_data[dst], ignore metrics
+    skip_reason: str | None = None
+    if force_overwrite_of is None or force_overwrite_of != flaw_data.get(dst, None):
+        skip_reason = check_metrics(dst, cve_id, output)
+
     if skip_reason:
         skip_value = getattr(output, skip_reason)
         record_aegis_meta(
@@ -240,7 +245,7 @@ async def suggest_impact(agent: Agent, flaw_data: FlawData, ts: datetime) -> set
         return changed
 
     # pick the "impact" field
-    changed |= update_field(flaw_data, ts, "impact", output)
+    changed |= update_field(flaw_data, ts, "impact", output, force_overwrite_of="")
 
     if not output.cvss3_vector:
         # no RH CVSS available
