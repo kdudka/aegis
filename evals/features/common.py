@@ -89,6 +89,11 @@ LOW_CONFIDENCE_PENALTY_DIVISOR = 4.0
 # minimal acceptable score returned by an evaluator
 MIN_SCORE_THRESHOLD = 0.1
 
+# per-evaluator score threshold overrides (evaluator name → threshold)
+EVALUATOR_SCORE_THRESHOLDS: dict[str, float] = {
+    "EcosystemEvaluator": 0.8,
+}
+
 # evaluation summary for each evaluated feature
 eval_summary: dict[str, str] = {}
 
@@ -376,14 +381,15 @@ def _log_eval_report(report: EvaluationReport) -> str:
         # score threshold
         for result in ecase.scores.values():
             score = result.value
-            if score < MIN_SCORE_THRESHOLD:
-                eval_name = eval_name_from_result(result)
+            eval_name = eval_name_from_result(result)
+            threshold = EVALUATOR_SCORE_THRESHOLDS.get(eval_name, MIN_SCORE_THRESHOLD)
+            if score < threshold:
                 if is_evaluator_known_to_fail(ecase, eval_name):
                     # this evaluator is known to fail --> no assertion failure
                     continue
 
                 failures += f"{ecase.name}: {eval_name}: score below threshold: "
-                failures += f"{score:.4f} < {MIN_SCORE_THRESHOLD}"
+                failures += f"{score:.4f} < {threshold}"
                 if result.reason:
                     failures += f", reason: {result.reason}"
                 failures += "\n"
