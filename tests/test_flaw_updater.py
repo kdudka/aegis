@@ -15,7 +15,7 @@ import pytest
 from aegis_ai.data_models import CVEID
 from aegis_ai.features.data_models import AegisAnswer
 from aegis_ai.osidb_bot.bot import FlawUpdater
-from aegis_ai.osidb_bot.suggest import METRICS_THR, update_field
+from aegis_ai.osidb_bot.suggest import METRICS_THR, suggest_description, update_field
 
 CVE_ID: CVEID = "CVE-2025-0001"
 
@@ -438,6 +438,60 @@ def test_update_field_force_overwrite_none_checks_metrics():
     assert flaw_data["impact"] == ""
 
     entries = flaw_data["aegis_meta"]["impact"]
+    assert len(entries) == 1
+    assert entries[0]["type"] == "AI-Bot-Skipped"
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_suggest_description_overwrites_cveorg_placeholder(mock_exec_feature):
+    """suggest_description() overwrites the CVEorg placeholder title even with low metrics."""
+    mock_exec_feature.return_value = SimpleNamespace(
+        suggested_title="Proper title",
+        suggested_description="Proper description.",
+        explanation="test",
+        data_quality=LOW_QUALITY,
+        confidence=LOW_CONFIDENCE,
+        tools_used=[],
+    )
+
+    flaw_data = _minimal_flaw_data()
+    flaw_data["title"] = "From CVEorg collector"
+    agent = MagicMock()
+
+    changed = await suggest_description(agent, flaw_data, TS)
+
+    assert "title" in changed
+    assert flaw_data["title"] == "Proper title"
+
+    entries = flaw_data["aegis_meta"]["title"]
+    assert len(entries) == 1
+    assert entries[0]["type"] == "AI-Bot"
+
+
+@pytest.mark.asyncio
+@patch("aegis_ai.osidb_bot.suggest.exec_feature", new_callable=AsyncMock)
+async def test_suggest_description_skips_real_title_on_low_metrics(mock_exec_feature):
+    """suggest_description() skips overwrite of a real title when metrics are low."""
+    mock_exec_feature.return_value = SimpleNamespace(
+        suggested_title="LLM title",
+        suggested_description="LLM description.",
+        explanation="test",
+        data_quality=LOW_QUALITY,
+        confidence=LOW_CONFIDENCE,
+        tools_used=[],
+    )
+
+    flaw_data = _minimal_flaw_data()
+    flaw_data["title"] = "Human-written title"
+    agent = MagicMock()
+
+    changed = await suggest_description(agent, flaw_data, TS)
+
+    assert "title" not in changed
+    assert flaw_data["title"] == "Human-written title"
+
+    entries = flaw_data["aegis_meta"]["title"]
     assert len(entries) == 1
     assert entries[0]["type"] == "AI-Bot-Skipped"
 
