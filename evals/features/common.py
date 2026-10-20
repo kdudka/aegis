@@ -356,10 +356,11 @@ def _log_eval_report(report: EvaluationReport) -> str:
     # check average scores across all evaluators
     if agg:
         for eval_name, score in agg.scores.items():
-            if score < MIN_SCORE_THRESHOLD:
+            threshold = EVALUATOR_SCORE_THRESHOLDS.get(eval_name, MIN_SCORE_THRESHOLD)
+            if score < threshold:
                 failures += (
                     f"{report.name}: {eval_name}: average score below threshold: "
-                    f"{score:.4f} < {MIN_SCORE_THRESHOLD}\n"
+                    f"{score:.4f} < {threshold}\n"
                 )
 
     # handle case failures (LLM quota exceeded, LLM response timed out, etc.)
