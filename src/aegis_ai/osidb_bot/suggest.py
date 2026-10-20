@@ -223,29 +223,34 @@ async def suggest_cwe(agent: Agent, flaw_data: FlawData, ts: datetime) -> set[st
 async def suggest_impact(agent: Agent, flaw_data: FlawData, ts: datetime) -> set[str]:
     cve_id = flaw_data.get("cve_id")
 
-    # look for existing RH CVSS
-    for cvss in flaw_data["cvss_scores"]:
-        if cvss["issuer"] == "RH":
-            logger.warning(f"{cve_id}: refusing to overwrite RH CVSS")
-            return set()
-
     # request the suggestion from Aegis
     feature = cve.SuggestImpact(agent)
     output = await exec_feature(feature, flaw_data)
 
     changed: set[str] = set()
 
-    if not output.impact:
+    if output.impact is None:
         changed |= record_aegis_failure(flaw_data, ts, "impact", output)
 
     if not output.cvss3_vector:
         changed |= record_aegis_failure(flaw_data, ts, "_cvss3_vector", output)
 
-    if not output.impact or not output.cvss3_vector:
+    if output.impact is None:
+        # no `impact` available, failure already recorded
         return changed
 
     # pick the "impact" field
     changed |= update_field(flaw_data, ts, "impact", output)
+
+    if not output.cvss3_vector:
+        # no RH CVSS available
+        return changed
+
+    # look for existing RH CVSS
+    for cvss in flaw_data["cvss_scores"]:
+        if cvss["issuer"] == "RH":
+            logger.warning(f"{cve_id}: refusing to overwrite RH CVSS")
+            return changed
 
     # record aegis_meta for RH CVSS (in the format used by OSIM)
     cvss_changed = update_field(
