@@ -134,8 +134,9 @@ class OSIDBClient:
             if self._session is None:
                 osidb_server_url = get_settings().osidb_server_url
                 try:
-                    self._session = osidb_bindings.new_session(
-                        osidb_server_uri=osidb_server_url
+                    self._session = await asyncio.to_thread(
+                        osidb_bindings.new_session,
+                        osidb_server_uri=osidb_server_url,
                     )
                 except Exception as e:
                     logger.warning(
@@ -218,7 +219,9 @@ class OSIDBClient:
         else:
             session = cast(Any, session)  # token was None, so session is not None
             try:
-                flaw_data = session.flaws.retrieve(id=cve_id, **params)
+                flaw_data = await asyncio.to_thread(
+                    session.flaws.retrieve, id=cve_id, **params
+                )
             except Exception as e:
                 if _is_osidb_unauthorized(e):
                     raise OSIDBUnauthorizedError() from e
@@ -286,19 +289,27 @@ class OSIDBClient:
                 params["offset"] = params.get("offset", 0) + len(parsed.results)
             return
         session = cast(Any, session)
+
         # retrieve_list_iterator treats `limit` as page size and follows all
         # pages, so we enforce the total-result cap client-side
-        try:
+        def _collect_flaws():
+            results = []
             for count, flaw in enumerate(
                 session.flaws.retrieve_list_iterator(**params)
             ):
-                yield flaw
+                results.append(flaw)
                 if limit is not None and count + 1 >= limit:
                     break
+            return results
+
+        try:
+            flaws = await asyncio.to_thread(_collect_flaws)
         except Exception as e:
             if _is_osidb_unauthorized(e):
                 raise OSIDBUnauthorizedError() from e
             raise
+        for flaw in flaws:
+            yield flaw
 
     async def count_component_flaws(
         self, component_name: str, *, include_embargoed: bool = False
@@ -332,7 +343,7 @@ class OSIDBClient:
             return int(data.get("count", 0))
         session = cast(Any, session)
         try:
-            return session.flaws.count(**params)
+            return await asyncio.to_thread(session.flaws.count, **params)
         except Exception as e:
             if _is_osidb_unauthorized(e):
                 raise OSIDBUnauthorizedError() from e
