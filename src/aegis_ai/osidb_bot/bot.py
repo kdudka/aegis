@@ -194,6 +194,7 @@ class FlawUpdater:
         self.retry_list = retry_list or {}
         self.on_failure = on_failure
         self.updated_fields = set()
+        self._osidb_write_pending = False
 
         try:
             # read flaw data
@@ -389,7 +390,10 @@ class FlawUpdater:
             aegis_meta["processed"] = True
 
             # write flaw data
+            self._osidb_write_pending = True
             processed = await asyncio.to_thread(self.save_flaw)
+            self._osidb_write_pending = False
+
             if processed:
                 # clear retry entry on the event loop thread (not in the
                 # worker thread) to avoid racing with other state-file writes
@@ -398,15 +402,19 @@ class FlawUpdater:
                 all_ok = self.on_failure(self.cve) if self.on_failure else False
 
             if _KERNEL_FLAGS_KEY in self.updated_fields:
+                self._osidb_write_pending = True
                 await asyncio.to_thread(self._create_labels)
+                self._osidb_write_pending = False
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
 
         if not all_ok:
+            self._osidb_write_pending = True
             await asyncio.to_thread(
                 self.create_label, "manual-triage", label_type="workflow"
             )
+            self._osidb_write_pending = False
 
         return processed
 
@@ -513,11 +521,13 @@ class Bot(StateProxy):
                 and flaw_updater
             ):
                 # the last retry attempt failed, create the manual-triage label
+                flaw_updater._osidb_write_pending = True
                 await asyncio.to_thread(
                     flaw_updater.create_label,
                     "manual-triage",
                     label_type="workflow",
                 )
+                flaw_updater._osidb_write_pending = False
 
             if not handled_failure:
                 # propagate all but RuntimeError exceptions
@@ -528,8 +538,9 @@ class Bot(StateProxy):
         finally:
             if self.retrying_failed:
                 self.decrement_retry(cve)
-            elif flaw_updater:
-                # mark as done
+            elif flaw_updater and not flaw_updater._osidb_write_pending:
+                # mark as done (but not if an OSIDB write is still running
+                # in a worker thread after cancellation)
                 self.pending[pos] = False
 
             # determine the next state
