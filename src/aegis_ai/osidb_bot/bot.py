@@ -228,7 +228,8 @@ class FlawUpdater:
         # query current server time once (before requesting suggestions)
         timestamp: datetime | None = None
         try:
-            timestamp = self.osidb.status().dt
+            status = await asyncio.to_thread(self.osidb.status)
+            timestamp = status.dt
         except Exception:  # noqa: S110
             pass
         if timestamp is None or isinstance(timestamp, Unset):
@@ -338,8 +339,6 @@ class FlawUpdater:
                     form_data=rh_cvss,
                 )
 
-            # successfully processed (we do not retry when only label creation fails)
-            self.retry_list.pop(self.cve, None)
             return True
 
         except Exception as e:
@@ -390,18 +389,24 @@ class FlawUpdater:
             aegis_meta["processed"] = True
 
             # write flaw data
-            processed = self.save_flaw()
-            if not processed:
+            processed = await asyncio.to_thread(self.save_flaw)
+            if processed:
+                # clear retry entry on the event loop thread (not in the
+                # worker thread) to avoid racing with other state-file writes
+                self.retry_list.pop(self.cve, None)
+            else:
                 all_ok = self.on_failure(self.cve) if self.on_failure else False
 
             if _KERNEL_FLAGS_KEY in self.updated_fields:
-                self._create_labels()
+                await asyncio.to_thread(self._create_labels)
 
         if self.updated_fields:
             self._info(f"updated {self.updated_fields}")
 
         if not all_ok:
-            self.create_label("manual-triage", label_type="workflow")
+            await asyncio.to_thread(
+                self.create_label, "manual-triage", label_type="workflow"
+            )
 
         return processed
 
@@ -434,6 +439,7 @@ class Bot(StateProxy):
         self.pending = {}
         try:
             osidb_server = get_settings().osidb_server_url
+            logger.info(f"establishing an OSIDB session: {osidb_server}")
             self.osidb = osidb_bindings.new_session(osidb_server_uri=osidb_server)
 
         except (
@@ -469,7 +475,8 @@ class Bot(StateProxy):
         assert cve
 
         try:
-            flaw_updater = FlawUpdater(
+            flaw_updater = await asyncio.to_thread(
+                FlawUpdater,
                 self.osidb,
                 self.agent,
                 cve,
@@ -506,7 +513,11 @@ class Bot(StateProxy):
                 and flaw_updater
             ):
                 # the last retry attempt failed, create the manual-triage label
-                flaw_updater.create_label("manual-triage", label_type="workflow")
+                await asyncio.to_thread(
+                    flaw_updater.create_label,
+                    "manual-triage",
+                    label_type="workflow",
+                )
 
             if not handled_failure:
                 # propagate all but RuntimeError exceptions
@@ -572,7 +583,7 @@ class Bot(StateProxy):
             cves = _cves_to_positions(cve_ids)
         else:
             # look for CVEs to process
-            cves = self.search_cves()
+            cves = await asyncio.to_thread(self.search_cves)
 
         await self._process_cve_list(cves)
 
