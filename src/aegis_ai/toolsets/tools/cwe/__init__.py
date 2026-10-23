@@ -288,6 +288,8 @@ class CWEManager:
                     if "mapping_usage" not in sample:
                         logger.info("CWE cache missing mapping_usage; regenerating.")
                         fetched = await self._fetch_and_parse_cwe_data()
+                        if not fetched:
+                            fetched = _load_bundled_definitions()
                         if fetched:
                             self._definitions = fetched
                             _invalidate_index_cache()
