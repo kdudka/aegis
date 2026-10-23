@@ -36,7 +36,6 @@ CWE_URLS = [
 CWE_XML_URL = "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
 
 CACHE_DIR = Path(get_settings().config_dir) / "mitre_cwe"
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
 CWE_DEFS_FILE = CACHE_DIR / "cwe_full_defs.json"
 CWE_TFIDF_MATRIX_FILE = CACHE_DIR / "cwe_tfidf.npy"
 CWE_VOCAB_FILE = CACHE_DIR / "cwe_vocab.json"
@@ -269,6 +268,7 @@ class CWEManager:
                 return
 
             self._debug = logger.isEnabledFor(logging.DEBUG)
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
             rebuild_index = False
 
             if CWE_DEFS_FILE.exists() and CWE_DEFS_FILE.stat().st_size > 0:
