@@ -74,6 +74,11 @@ KEYWORD_BOOSTS: list[tuple[re.Pattern[str], str, float]] = [
 # fmt: on
 
 
+def _invalidate_index_cache() -> None:
+    for f in (CWE_TFIDF_MATRIX_FILE, CWE_VOCAB_FILE, CWE_INDEX_MAP_FILE):
+        f.unlink(missing_ok=True)
+
+
 def _load_bundled_definitions() -> dict[str, dict]:
     if not BUNDLED_DEFS_FILE.exists():
         logger.error(f"Bundled CWE definitions not found at '{BUNDLED_DEFS_FILE}'.")
@@ -285,6 +290,7 @@ class CWEManager:
                         fetched = await self._fetch_and_parse_cwe_data()
                         if fetched:
                             self._definitions = fetched
+                            _invalidate_index_cache()
                             await write_json_async(CWE_DEFS_FILE, self._definitions)
                         rebuild_index = True
 
@@ -299,6 +305,7 @@ class CWEManager:
                     self._definitions = _load_bundled_definitions()
 
                 if self._definitions:
+                    _invalidate_index_cache()
                     logger.info(f"Writing CWE definitions to '{CWE_DEFS_FILE}'.")
                     await write_json_async(CWE_DEFS_FILE, self._definitions)
                 rebuild_index = True
