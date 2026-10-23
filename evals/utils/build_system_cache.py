@@ -109,7 +109,7 @@ def build_system_cache_retrieve_batch(
     """Batch cache lookup: read hits from disk, resolve misses in one batch.
 
     Misses go through the original ``_lookup_binary_rpms_batch`` so
-    Deptopia is queried once per package, not once per stream.
+    bomq is queried once per package, not once per stream.
     """
     results: dict[str, ListBinaryRPMsOutput] = {}
     missed_streams: list[str] = []

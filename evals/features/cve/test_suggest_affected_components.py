@@ -155,6 +155,17 @@ DEFAULT_CVE_IDS: tuple[str, ...] = (
     "CVE-2026-40938",
     "CVE-2026-41843",
     "CVE-2026-56128",
+    "CVE-2026-75973",
+    "CVE-2026-76183",
+    "CVE-2026-77756",
+    "CVE-2026-77762",
+    "CVE-2026-77791",
+    "CVE-2026-78383",
+    "CVE-2026-78437",
+    "CVE-2026-79677",
+    "CVE-2026-86350",
+    "CVE-2026-87022",
+    "CVE-2026-88015",
 )
 
 
@@ -208,6 +219,17 @@ EXPECTED_ECOSYSTEMS: dict[str, list[str]] = {
     "CVE-2026-40938": ["golang"],
     "CVE-2026-41843": ["maven"],
     "CVE-2026-56128": ["generic"],
+    "CVE-2026-75973": ["generic"],
+    "CVE-2026-76183": ["generic"],
+    "CVE-2026-77756": ["generic"],
+    "CVE-2026-77762": ["generic"],
+    "CVE-2026-77791": ["generic"],
+    "CVE-2026-78383": ["generic"],
+    "CVE-2026-78437": ["generic"],
+    "CVE-2026-79677": ["generic"],
+    "CVE-2026-86350": ["generic"],
+    "CVE-2026-87022": ["generic"],
+    "CVE-2026-88015": ["golang"],
 }
 
 
@@ -307,11 +329,8 @@ def _build_cases(
     return cases
 
 
-class SuggestAffectedComponentsCase(Case):
+class SuggestAffectedComponentsCase(Case[str, Any, Any]):
     """Evaluation case: inputs = cve_id, expected_output = list of component names."""
-
-    inputs: str  # cve_id
-    expected_output: list[str]
 
 
 def _normalized_component_sets(names: list[str]) -> set[str]:

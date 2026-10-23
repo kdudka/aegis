@@ -11,9 +11,10 @@ from osidb_bindings.bindings.python_client.models.osidb_api_v1_flaws_list_respon
 from osidb_bindings.bindings.python_client.models.osidb_api_v1_flaws_retrieve_response_200 import (
     OsidbApiV1FlawsRetrieveResponse200,
 )
+from osidb_bindings.bindings.python_client.types import Unset
 
 from aegis_ai import get_settings
-from aegis_ai.request_context import get_request_scope
+from aegis_ai.request_context import OSIDB_ACCESS_TOKEN_KEY, get_request_scope
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +99,15 @@ class OSIDBClient:
         cached = scope.get(_OSIDB_DELEGATED_TOKEN_KEY)
         if cached is not None:
             return cached
+        access_token = scope.get(OSIDB_ACCESS_TOKEN_KEY)
+        if access_token is not None:
+            return access_token
         ctx = scope.get("gssapi_context")
         if not ctx or not getattr(ctx, "delegated_creds", None):
             return None
         from aegis_ai.toolsets.tools.osidb.osidb_delegation import (
             _prepare_delegated_creds_for_thread,
+            destroy_kerberos_ccache,
             get_osidb_token_for_delegated_cred,
         )
 
@@ -110,11 +115,15 @@ class OSIDBClient:
         ccache_name = _prepare_delegated_creds_for_thread(delegated_creds)
         creds_arg = ccache_name if ccache_name is not None else delegated_creds
 
-        token = await asyncio.to_thread(
-            get_osidb_token_for_delegated_cred,
-            creds_arg,
-            get_settings().osidb_server_url,
-        )
+        try:
+            token = await asyncio.to_thread(
+                get_osidb_token_for_delegated_cred,
+                creds_arg,
+                get_settings().osidb_server_url,
+            )
+        finally:
+            if ccache_name is not None:
+                await asyncio.to_thread(destroy_kerberos_ccache, ccache_name)
         if token:
             scope[_OSIDB_DELEGATED_TOKEN_KEY] = token
         return token
@@ -125,8 +134,9 @@ class OSIDBClient:
             if self._session is None:
                 osidb_server_url = get_settings().osidb_server_url
                 try:
-                    self._session = osidb_bindings.new_session(
-                        osidb_server_uri=osidb_server_url
+                    self._session = await asyncio.to_thread(
+                        osidb_bindings.new_session,
+                        osidb_server_uri=osidb_server_url,
                     )
                 except Exception as e:
                     logger.warning(
@@ -209,7 +219,9 @@ class OSIDBClient:
         else:
             session = cast(Any, session)  # token was None, so session is not None
             try:
-                flaw_data = session.flaws.retrieve(id=cve_id, **params)
+                flaw_data = await asyncio.to_thread(
+                    session.flaws.retrieve, id=cve_id, **params
+                )
             except Exception as e:
                 if _is_osidb_unauthorized(e):
                     raise OSIDBUnauthorizedError() from e
@@ -239,6 +251,8 @@ class OSIDBClient:
         logger.info(
             f"[component_flaw_tool] Listing flaws for component '{component_name}'."
         )
+        if limit is not None and limit <= 0:
+            return
         params: dict[str, Any] = {
             "components": component_name,
             "include_fields": _FLAW_LIST_FIELDS,
@@ -249,35 +263,53 @@ class OSIDBClient:
             params["embargoed"] = False
         session, token = await self._get_session_or_token()
         if token:
-            try:
-                data = await self._token_get(
-                    path="/osidb/api/v2/flaws",
-                    params=params,
-                    token=token,
-                    timeout=30.0,
-                )
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 401:
-                    raise OSIDBUnauthorizedError() from e
-                raise
-            parsed = OsidbApiV1FlawsListResponse200.from_dict(data)
-            for item in parsed.results or []:
-                yield item
+            count = 0
+            while True:
+                try:
+                    data = await self._token_get(
+                        path="/osidb/api/v2/flaws",
+                        params=params,
+                        token=token,
+                        timeout=30.0,
+                    )
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 401:
+                        raise OSIDBUnauthorizedError() from e
+                    raise
+                parsed = OsidbApiV1FlawsListResponse200.from_dict(data)
+                if not parsed.results:
+                    break
+                for item in parsed.results:
+                    yield item
+                    count += 1
+                    if limit is not None and count >= limit:
+                        return
+                if isinstance(parsed.next_, Unset) or not parsed.next_:
+                    break
+                params["offset"] = params.get("offset", 0) + len(parsed.results)
             return
         session = cast(Any, session)
+
         # retrieve_list_iterator treats `limit` as page size and follows all
         # pages, so we enforce the total-result cap client-side
-        try:
+        def _collect_flaws():
+            results = []
             for count, flaw in enumerate(
                 session.flaws.retrieve_list_iterator(**params)
             ):
-                yield flaw
+                results.append(flaw)
                 if limit is not None and count + 1 >= limit:
                     break
+            return results
+
+        try:
+            flaws = await asyncio.to_thread(_collect_flaws)
         except Exception as e:
             if _is_osidb_unauthorized(e):
                 raise OSIDBUnauthorizedError() from e
             raise
+        for flaw in flaws:
+            yield flaw
 
     async def count_component_flaws(
         self, component_name: str, *, include_embargoed: bool = False
@@ -311,7 +343,7 @@ class OSIDBClient:
             return int(data.get("count", 0))
         session = cast(Any, session)
         try:
-            return session.flaws.count(**params)
+            return await asyncio.to_thread(session.flaws.count, **params)
         except Exception as e:
             if _is_osidb_unauthorized(e):
                 raise OSIDBUnauthorizedError() from e

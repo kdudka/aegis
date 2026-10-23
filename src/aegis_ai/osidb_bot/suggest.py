@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic_ai import Agent
 
+from aegis_ai import get_settings
 from aegis_ai.data_models import CVEID, cveid_validator
 from aegis_ai.features import Feature, cve
 from aegis_ai.features.data_models import AegisAnswer, AegisFeatureModel
@@ -75,6 +76,7 @@ def record_aegis_meta(
     dst_field = aegis_meta.setdefault(dst, [])
     entry: dict[str, Any] = {
         "timestamp": timestamp.isoformat(),
+        "aegis_version": get_settings().app_version,
         "data_quality": output.data_quality,
         "confidence": output.confidence,
         "tools_used": output.tools_used,
@@ -111,11 +113,16 @@ def update_field(
     output: AegisAnswer,
     src: str | None = None,
     value: str | None = None,
+    force_overwrite_of: Any = None,
 ) -> set[str]:
     assert (not src) or (not value)
-
     cve_id = flaw_data.get("cve_id", "")
-    skip_reason = check_metrics(dst, cve_id, output)
+
+    # if force_overwrite_of is specified and matches flaw_data[dst], ignore metrics
+    skip_reason: str | None = None
+    if force_overwrite_of is None or force_overwrite_of != flaw_data.get(dst, None):
+        skip_reason = check_metrics(dst, cve_id, output)
+
     if skip_reason:
         skip_value = getattr(output, skip_reason)
         record_aegis_meta(
@@ -172,7 +179,7 @@ async def suggest_components(
 
     # record suggested ecosystems in aegis_meta if any
     if output.ecosystems:
-        update_field(flaw_data, ts, "_ecosystems", output, src="ecosystems")
+        changed |= update_field(flaw_data, ts, "_ecosystems", output, src="ecosystems")
 
     return changed
 
@@ -184,8 +191,19 @@ async def suggest_description(
     feature = cve.SuggestDescriptionText(agent)
     output = await exec_feature(feature, flaw_data)
 
+    if not output.suggested_title:
+        # no title suggested, giving up
+        return record_aegis_failure(flaw_data, ts, "title", output)
+
     # pick the relevant fields
-    changed = update_field(flaw_data, ts, "title", output, src="suggested_title")
+    changed = update_field(
+        flaw_data,
+        ts,
+        "title",
+        output,
+        src="suggested_title",
+        force_overwrite_of="From CVEorg collector",
+    )
     changed |= update_field(
         flaw_data, ts, "cve_description", output, src="suggested_description"
     )
@@ -221,29 +239,34 @@ async def suggest_cwe(agent: Agent, flaw_data: FlawData, ts: datetime) -> set[st
 async def suggest_impact(agent: Agent, flaw_data: FlawData, ts: datetime) -> set[str]:
     cve_id = flaw_data.get("cve_id")
 
-    # look for existing RH CVSS
-    for cvss in flaw_data["cvss_scores"]:
-        if cvss["issuer"] == "RH":
-            logger.warning(f"{cve_id}: refusing to overwrite RH CVSS")
-            return set()
-
     # request the suggestion from Aegis
     feature = cve.SuggestImpact(agent)
     output = await exec_feature(feature, flaw_data)
 
     changed: set[str] = set()
 
-    if not output.impact:
+    if output.impact is None:
         changed |= record_aegis_failure(flaw_data, ts, "impact", output)
 
     if not output.cvss3_vector:
         changed |= record_aegis_failure(flaw_data, ts, "_cvss3_vector", output)
 
-    if not output.impact or not output.cvss3_vector:
+    if output.impact is None:
+        # no `impact` available, failure already recorded
         return changed
 
     # pick the "impact" field
-    changed |= update_field(flaw_data, ts, "impact", output)
+    changed |= update_field(flaw_data, ts, "impact", output, force_overwrite_of="")
+
+    if not output.cvss3_vector:
+        # no RH CVSS available
+        return changed
+
+    # look for existing RH CVSS
+    for cvss in flaw_data["cvss_scores"]:
+        if cvss["issuer"] == "RH":
+            logger.warning(f"{cve_id}: refusing to overwrite RH CVSS")
+            return changed
 
     # record aegis_meta for RH CVSS (in the format used by OSIM)
     cvss_changed = update_field(

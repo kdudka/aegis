@@ -187,7 +187,7 @@ class AppSettings(BaseSettings):
     default_llm_temperature: float = get_env_float("AEGIS_LLM_TEMPERATURE", 0.055)
     default_llm_top_p: float = get_env_float("AEGIS_LLM_TOP_P", 0.8)
     default_llm_max_tokens: int = get_env_int("AEGIS_LLM_MAX_TOKENS", 0)
-    default_llm_prompt_timeout: int = get_env_int("AEGIS_LLM_TIMEOUT_SECS", 300)
+    default_llm_prompt_timeout: int = get_env_int("AEGIS_LLM_TIMEOUT_SECS", 200)
     llm_max_jobs: int = get_env_int("AEGIS_LLM_MAX_JOBS", 4)
 
     # Aegis safety subagent
@@ -214,6 +214,9 @@ class AppSettings(BaseSettings):
     use_build_system_tool: bool = get_env_flag(
         "AEGIS_USE_BUILD_SYSTEM_TOOL_CONTEXT", False
     )
+    use_osidb_component_tool: bool = get_env_flag(
+        "AEGIS_USE_OSIDB_COMPONENT_TOOL_CONTEXT", False
+    )
 
     # Enables the kernel-specific XGBoost impact classifier for Linux kernel CVEs.
     # When true, kernel CVEs are routed through the patch-feature pipeline before
@@ -227,8 +230,8 @@ class AppSettings(BaseSettings):
     # osidb-bot KPI cache
     bot_kpi_cache_dir: str = os.getenv("AEGIS_BOT_KPI_CACHE_DIR", "")
 
-    # Deptopia
-    deptopia_url: str = os.getenv("AEGIS_DEPTOPIA_URL", "https://localhost:8080")
+    # bomq
+    bomq_url: str = os.getenv("AEGIS_BOMQ_URL", "https://localhost:8080")
 
     # OSIDB
     osidb_server_url: str = os.getenv(

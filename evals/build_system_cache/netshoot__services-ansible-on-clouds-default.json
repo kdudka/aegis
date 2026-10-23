@@ -1,6 +1,6 @@
 {
-    "status": "not_found",
-    "error_message": "No builds found for package 'netshoot' in stream 'services-ansible-on-clouds-default'",
+    "status": "error",
+    "error_message": "Koji/Brew error: invalid format: netshoot-c227c7fcaf34ca7357837eb6ad37679974fe519fa7175848367ef8d0dc009847",
     "package": "netshoot",
     "ps_update_stream": "services-ansible-on-clouds-default",
     "binary_rpms": [],

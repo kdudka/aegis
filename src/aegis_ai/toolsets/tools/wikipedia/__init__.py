@@ -1,5 +1,4 @@
 import logging
-from typing import Literal
 
 import wikipedia
 from pydantic import Field
@@ -42,8 +41,9 @@ class WikipediaSoftwareInfo(BaseToolOutput):
         default_factory=list,
         description="A list of top-level section titles within the Wikipedia page.",
     )
-    status: Literal["success", "not_found", "disambiguation", "error"] = Field(
-        ..., description="The status of the Wikipedia information retrieval."
+    status: str = Field(
+        ...,
+        description="The status of the Wikipedia information retrieval: 'success', 'not_found', 'disambiguation', or 'error'.",
     )
     error_message: str | None = Field(
         None,

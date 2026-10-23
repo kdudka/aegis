@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from google.genai.errors import ServerError
 from httpx2 import ReadError
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
 from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -35,7 +35,7 @@ from pydantic_evals.reporting.render_numbers import default_render_number
 
 from aegis_ai import get_settings
 from aegis_ai.agents import agent_default_max_retries
-from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_503_DELAY_INIT
+from aegis_ai.features import HTTP_RETRY_CODES, PROMPT_RETRY_DELAY_INIT
 from aegis_ai.features.data_models import AegisFeatureModel
 
 # minimal acceptable length of an explanation (where applicable)
@@ -88,6 +88,11 @@ LOW_CONFIDENCE_PENALTY_DIVISOR = 4.0
 
 # minimal acceptable score returned by an evaluator
 MIN_SCORE_THRESHOLD = 0.1
+
+# per-evaluator score threshold overrides (evaluator name → threshold)
+EVALUATOR_SCORE_THRESHOLDS: dict[str, float] = {
+    "EcosystemEvaluator": 0.8,
+}
 
 # evaluation summary for each evaluated feature
 eval_summary: dict[str, str] = {}
@@ -160,7 +165,7 @@ class LLMJudgeWrapper(LLMJudge):
 
     async def evaluate(self, ctx):
         # how long we sleep before next attempt
-        delay = PROMPT_RETRY_503_DELAY_INIT
+        delay = PROMPT_RETRY_DELAY_INIT
 
         # retry loop
         attempt = 0
@@ -169,7 +174,7 @@ class LLMJudgeWrapper(LLMJudge):
                 # regular evaluation of LLMJudge
                 return await super().evaluate(ctx)
 
-            except (ModelHTTPError, ServerError, ReadError) as e:
+            except (ModelAPIError, ModelHTTPError, ServerError, ReadError) as e:
                 if agent_default_max_retries <= attempt:
                     # exceeded retry attempts count
                     raise
@@ -183,8 +188,13 @@ class LLMJudgeWrapper(LLMJudge):
                     # propagate other exceptions
                     raise
 
-                # increment the counter of retries
-                attempt += 1
+                if code == 429:
+                    # most likely {'code': 429, 'message': 'Resource has been exhausted (e.g. check quota).', 'status': 'RESOURCE_EXHAUSTED'}
+                    # -> retry only once in case it was an intermittent issue (to avoid exceeding the quota futher)
+                    attempt = agent_default_max_retries
+                else:
+                    # increment the counter of retries
+                    attempt += 1
 
                 # print a warning that we retry the prompt
                 msg = f"LLMJudge raised an exception: {e}"
@@ -246,12 +256,14 @@ def _format_suggest_affected_components_output(val: Any) -> str:
     return " ".join(parts) if parts else str(val)
 
 
-def _score_with_threshold_indicator(value: float) -> str:
-    """Format score with pass/fail indicator based on MIN_SCORE_THRESHOLD."""
+def _score_with_threshold_indicator(
+    value: float, threshold: float = MIN_SCORE_THRESHOLD
+) -> str:
+    """Format score with pass/fail indicator based on the given threshold."""
     if isinstance(value, float) and math.isnan(value):
         return "NaN [red]✗[/]"
     formatted = default_render_number(value)
-    indicator = "[green]✔[/]" if value >= MIN_SCORE_THRESHOLD else "[red]✗[/]"
+    indicator = "[green]✔[/]" if value >= threshold else "[red]✗[/]"
     return f"{formatted} {indicator}"
 
 
@@ -260,8 +272,13 @@ def _build_score_configs(report: EvaluationReport) -> dict[str, RenderNumberConf
     score_names: set[str] = set()
     for case in report.cases:
         score_names.update(case.scores.keys())
+
+    def _make_formatter(name: str):
+        threshold = EVALUATOR_SCORE_THRESHOLDS.get(name, MIN_SCORE_THRESHOLD)
+        return lambda v: _score_with_threshold_indicator(v, threshold)
+
     return {
-        name: RenderNumberConfig(value_formatter=_score_with_threshold_indicator)
+        name: RenderNumberConfig(value_formatter=_make_formatter(name))
         for name in score_names
     }
 
@@ -339,10 +356,11 @@ def _log_eval_report(report: EvaluationReport) -> str:
     # check average scores across all evaluators
     if agg:
         for eval_name, score in agg.scores.items():
-            if score < MIN_SCORE_THRESHOLD:
+            threshold = EVALUATOR_SCORE_THRESHOLDS.get(eval_name, MIN_SCORE_THRESHOLD)
+            if score < threshold:
                 failures += (
                     f"{report.name}: {eval_name}: average score below threshold: "
-                    f"{score:.4f} < {MIN_SCORE_THRESHOLD}\n"
+                    f"{score:.4f} < {threshold}\n"
                 )
 
     # handle case failures (LLM quota exceeded, LLM response timed out, etc.)
@@ -371,14 +389,15 @@ def _log_eval_report(report: EvaluationReport) -> str:
         # score threshold
         for result in ecase.scores.values():
             score = result.value
-            if score < MIN_SCORE_THRESHOLD:
-                eval_name = eval_name_from_result(result)
+            eval_name = eval_name_from_result(result)
+            threshold = EVALUATOR_SCORE_THRESHOLDS.get(eval_name, MIN_SCORE_THRESHOLD)
+            if score < threshold:
                 if is_evaluator_known_to_fail(ecase, eval_name):
                     # this evaluator is known to fail --> no assertion failure
                     continue
 
                 failures += f"{ecase.name}: {eval_name}: score below threshold: "
-                failures += f"{score:.4f} < {MIN_SCORE_THRESHOLD}"
+                failures += f"{score:.4f} < {threshold}"
                 if result.reason:
                     failures += f", reason: {result.reason}"
                 failures += "\n"

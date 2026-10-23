@@ -10,5 +10,5 @@
         "vim-filesystem",
         "vim-minimal"
     ],
-    "build_nvr": "vim-7.4.629-5.el6_10.3"
+    "build_nvr": "vim-7.4.629-5.el6_10.4"
 }

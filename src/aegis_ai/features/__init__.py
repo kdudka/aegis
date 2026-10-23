@@ -8,7 +8,11 @@ from google.genai.errors import ServerError
 from httpx2 import ReadError
 from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+)
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.run import AgentRunResult
 
@@ -108,7 +112,7 @@ llm_input_tokens_warn_thr = get_env_int("AEGIS_LLM_INPUT_TOKENS_WARN_THR", 13107
 
 
 # initial delay in seconds after getting HTTP 503 status code from LLM (doubled on each attempt)
-PROMPT_RETRY_503_DELAY_INIT = 8
+PROMPT_RETRY_DELAY_INIT = 8
 
 # temperature override while retrying a prompt
 PROMPT_RETRY_TEMPERATURE = 0.9
@@ -120,7 +124,7 @@ PROMPT_INFO_PERIOD = 60
 _MAX_OUTPUT_ENFORCEMENT_RETRIES = 3
 
 # HTTP status codes for which LLM prompt should be retried on ModelHTTPError or ServerError
-HTTP_RETRY_CODES = (500, 502, 503, 504)
+HTTP_RETRY_CODES = (429, 500, 502, 503, 504)
 
 
 def id_from_context(context: BaseModel) -> str:
@@ -214,11 +218,8 @@ class Feature(ABC):
             return await run_with_heartbeat(runner, prefix=call_str)
 
         except TimeoutError:
-            # fmt: off
-            msg = f"{call_str}: LLM request timed out after {llm_prompt_timeout} seconds"
-            logger.warning(msg)
-            raise RuntimeError(msg)
-            # fmt: on
+            # will be handled in guarded_run()
+            raise
 
         except Exception as e:
             logger.warning(f"{call_str} raised an exception: {e.__class__.__name__}")
@@ -271,7 +272,16 @@ class Feature(ABC):
                     # success (no exception)
                     break
 
-                except (ModelHTTPError, ServerError, ReadError) as e:
+                except TimeoutError:
+                    timeout_msg = f"{call_str}: LLM request timed out after {llm_prompt_timeout} seconds"
+                    logger.warning(timeout_msg)
+                    if agent_default_max_retries <= attempt:
+                        raise RuntimeError(timeout_msg)
+
+                    # retry only once in case it was an intermittent issue
+                    attempt = agent_default_max_retries - 1
+
+                except (ModelAPIError, ModelHTTPError, ServerError, ReadError) as e:
                     if agent_default_max_retries <= attempt:
                         # exceeded retry attempts count
                         raise
@@ -285,8 +295,13 @@ class Feature(ABC):
                         # propagate other exceptions
                         raise
 
+                    if code == 429:
+                        # most likely {'code': 429, 'message': 'Resource has been exhausted (e.g. check quota).', 'status': 'RESOURCE_EXHAUSTED'}
+                        # -> retry only once in case it was an intermittent issue (to avoid exceeding the quota futher)
+                        attempt = agent_default_max_retries - 1
+
                     # retry the prompt with gradually increasing delay
-                    delay = (delay * 2) if delay else PROMPT_RETRY_503_DELAY_INIT
+                    delay = (delay * 2) if delay else PROMPT_RETRY_DELAY_INIT
 
                 except UnexpectedModelBehavior:
                     if agent_default_max_retries <= attempt:

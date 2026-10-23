@@ -19,7 +19,7 @@ from pydantic_ai.toolsets import (
 from pydantic_ai.toolsets.wrapper import WrapperToolset
 
 from aegis_ai import get_settings
-from aegis_ai.toolsets.tools.osidb import osidb_toolset
+from aegis_ai.toolsets.tools.osidb import osidb_component_toolset, osidb_toolset
 from aegis_ai.toolsets.tools.osv_dev_cve import osv_dev_cve_tool
 from aegis_ai.toolsets.tools.osv_dev_ghsa import osv_dev_ghsa_tool
 
@@ -179,6 +179,10 @@ public_toolset = CombinedToolset(public_toolset_list)
 redhat_cve_toolset_list: list[AbstractToolset[Any]] = [
     osidb_toolset,
 ]
+
+if get_settings().use_osidb_component_tool:
+    redhat_cve_toolset_list.append(osidb_component_toolset)
+
 redhat_cve_toolset = CombinedToolset(redhat_cve_toolset_list)
 
 # Kernel-only tools (classifier + linux CVE lookup) for per-run injection
@@ -197,7 +201,7 @@ if get_settings().use_linux_cve_tool:
 
 kernel_extra_toolset = CombinedToolset(kernel_extra_toolset_list)
 
-# Build-system tools (Brew/Deptopia binary RPM lookup) for per-run injection
+# Build-system tools (Brew/bomq binary RPM lookup) for per-run injection
 # into SuggestAffectedPackages.
 build_system_toolset_list: list[AbstractToolset[Any]] = []
 
